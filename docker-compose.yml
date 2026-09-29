@@ -1,0 +1,55 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: escalator
+      POSTGRES_PASSWORD: escalator
+      POSTGRES_DB: escalator
+    ports:
+      - "5438:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U escalator -d escalator"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7
+    ports:
+      - "6384:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: ./backend
+    env_file: .env.example
+    environment:
+      APP_ENV: development
+      HTTP_PORT: 8080
+      DATABASE_URL: postgres://escalator:escalator@postgres:5432/escalator?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
+      CORS_ALLOWED_ORIGIN: http://localhost:5175
+    ports:
+      - "8083:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    build: ./frontend
+    environment:
+      VITE_API_ORIGIN: http://localhost:8083
+    ports:
+      - "5175:5173"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
