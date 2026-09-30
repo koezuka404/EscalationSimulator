@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/url"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"escalator/config"
+	"escalator/infra/postgres"
 )
 
 func main() {
@@ -18,10 +20,27 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := dial(cfg.DatabaseURL); err != nil {
+	db, err := postgres.Open(cfg.DatabaseURL)
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "PostgreSQL に接続できません: %v\n", err)
 		os.Exit(1)
 	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "PostgreSQL に接続できません: %v\n", err)
+		os.Exit(1)
+	}
+	defer sqlDB.Close()
+
+	if err := postgres.MigrateCustomers(db); err != nil {
+		fmt.Fprintf(os.Stderr, "customers テーブルを用意できません: %v\n", err)
+		os.Exit(1)
+	}
+	if err := postgres.SeedCustomersIfEmpty(context.Background(), postgres.NewCustomerRepository(db)); err != nil {
+		fmt.Fprintf(os.Stderr, "サンプル顧客を用意できません: %v\n", err)
+		os.Exit(1)
+	}
+
 	if err := dial(cfg.RedisURL); err != nil {
 		fmt.Fprintf(os.Stderr, "Redis に接続できません: %v\n", err)
 		os.Exit(1)
