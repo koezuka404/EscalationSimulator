@@ -14,4 +14,5 @@ func Customers(e *echo.Echo, api *controller.CustomerAPI) {
 func Auth(e *echo.Echo, api *controller.AuthAPI) {
 	e.POST("/api/auth/register", api.Register)
 	e.POST("/api/auth/login", api.Login)
+	e.POST("/api/auth/logout", api.Logout)
 }

@@ -8,6 +8,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"escalator/domain"
+	"escalator/middleware"
 	"escalator/usecase"
 )
 
@@ -15,16 +16,18 @@ import (
 type AuthAPI struct {
 	signUp            *usecase.SignUp
 	logIn             *usecase.LogIn
+	logOut            *usecase.LogOut
 	refreshCookieName string
 	csrfCookieName    string
 	cookieSecure      bool
 	refreshTTL        int
 }
 
-func NewAuthAPI(signUp *usecase.SignUp, logIn *usecase.LogIn, refreshCookieName, csrfCookieName string, cookieSecure bool, refreshTTLSeconds int) *AuthAPI {
+func NewAuthAPI(signUp *usecase.SignUp, logIn *usecase.LogIn, logOut *usecase.LogOut, refreshCookieName, csrfCookieName string, cookieSecure bool, refreshTTLSeconds int) *AuthAPI {
 	return &AuthAPI{
 		signUp:            signUp,
 		logIn:             logIn,
+		logOut:            logOut,
 		refreshCookieName: refreshCookieName,
 		csrfCookieName:    csrfCookieName,
 		cookieSecure:      cookieSecure,
@@ -60,6 +63,22 @@ func (a *AuthAPI) Login(c echo.Context) error {
 		ExpiresIn:   int(time.Until(result.ExpiresAt).Seconds()),
 		User:        toUserJSON(result.User),
 	})
+}
+
+func (a *AuthAPI) Logout(c echo.Context) error {
+	if err := middleware.Allow(c.Request(), a.csrfCookieName); err != nil {
+		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
+	}
+	refreshToken := ""
+	if cookie, err := c.Cookie(a.refreshCookieName); err == nil {
+		refreshToken = cookie.Value
+	}
+	if err := a.logOut.Execute(c.Request().Context(), refreshToken); err != nil {
+		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "ログアウトできませんでした。しばらくしてから、もう一度試してください"})
+	}
+	c.SetCookie(sessionCookie(a.refreshCookieName, "", -1, true, a.cookieSecure))
+	c.SetCookie(sessionCookie(a.csrfCookieName, "", -1, false, a.cookieSecure))
+	return c.JSON(http.StatusOK, messageJSON{Message: "ログアウトしました"})
 }
 
 type registerJSON struct {

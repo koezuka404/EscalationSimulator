@@ -47,3 +47,7 @@ func (r *SessionRepository) Save(ctx context.Context, session domain.Session) er
 	}
 	return r.db.WithContext(ctx).Create(&row).Error
 }
+
+func (r *SessionRepository) RevokeByHash(ctx context.Context, tokenHash string) error {
+	return r.db.WithContext(ctx).Model(&sessionRow{}).Where("token_hash = ?", tokenHash).Update("revoked", true).Error
+}

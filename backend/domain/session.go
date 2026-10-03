@@ -15,4 +15,5 @@ type Session struct {
 
 type SessionRepository interface {
 	Save(ctx context.Context, session Session) error
+	RevokeByHash(ctx context.Context, tokenHash string) error
 }

@@ -40,6 +40,10 @@ func NewSecretToken() (raw, hash string, err error) {
 		return "", "", err
 	}
 	raw = base64.RawURLEncoding.EncodeToString(buf)
+	return raw, Hash(raw), nil
+}
+
+func Hash(raw string) string {
 	sum := sha256.Sum256([]byte(raw))
-	return raw, hex.EncodeToString(sum[:]), nil
+	return hex.EncodeToString(sum[:])
 }
