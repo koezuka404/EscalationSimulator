@@ -2,15 +2,22 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
 	"time"
 
+	"github.com/labstack/echo/v4"
+
 	"escalator/config"
+	"escalator/controller"
 	"escalator/infra/postgres"
+	"escalator/router"
+	"escalator/usecase"
 )
 
 func main() {
@@ -46,10 +53,29 @@ func main() {
 		os.Exit(1)
 	}
 
+	e := echo.New()
+	e.HideBanner = true
+	e.HidePort = true
+	router.Customers(e, controller.NewCustomerAPI(usecase.NewCustomers(postgres.NewCustomerRepository(db))))
+
+	go func() {
+		if err := e.Start(fmt.Sprintf(":%d", cfg.HTTPPort)); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			fmt.Fprintf(os.Stderr, "HTTP を起動できません: %v\n", err)
+			os.Exit(1)
+		}
+	}()
+
 	fmt.Printf("環境を起動しました env=%s port=%d\n", cfg.Environment, cfg.HTTPPort)
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt)
 	<-stop
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := e.Shutdown(shutdownCtx); err != nil {
+		fmt.Fprintf(os.Stderr, "HTTP を停止できません: %v\n", err)
+		os.Exit(1)
+	}
 }
 
 func dial(rawURL string) error {
