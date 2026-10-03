@@ -13,16 +13,18 @@ import (
 )
 
 type userRow struct {
-	ID           string `gorm:"primaryKey"`
-	Email        string `gorm:"uniqueIndex"`
-	PasswordHash string
-	Name         string
-	Role         string
-	CustomerID   string
-	Status       string
-	AuthVersion  int
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	ID               string `gorm:"primaryKey"`
+	Email            string `gorm:"uniqueIndex"`
+	PasswordHash     string
+	Name             string
+	Role             string
+	CustomerID       string
+	Status           string
+	AuthVersion      int
+	FailedLoginCount int
+	LockedUntil      *time.Time
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 }
 
 func (userRow) TableName() string { return "users" }
@@ -54,28 +56,71 @@ func (r *UserRepository) Save(ctx context.Context, user domain.User) (domain.Use
 	return userFromRow(row), nil
 }
 
+func (r *UserRepository) FindByEmail(ctx context.Context, email string) (domain.User, error) {
+	var row userRow
+	err := r.db.WithContext(ctx).First(&row, "email = ?", email).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return domain.User{}, domain.ErrUserNotFound
+	}
+	if err != nil {
+		return domain.User{}, err
+	}
+	return userFromRow(row), nil
+}
+
+func (r *UserRepository) UpdateLoginState(ctx context.Context, user domain.User) error {
+	var lockedUntil any
+	if user.LockedUntil.IsZero() {
+		lockedUntil = nil
+	} else {
+		lockedUntil = user.LockedUntil
+	}
+	return r.db.WithContext(ctx).Model(&userRow{}).Where("id = ?", user.ID).Updates(map[string]any{
+		"failed_login_count": user.FailedLoginCount,
+		"locked_until":       lockedUntil,
+	}).Error
+}
+
 func userToRow(user domain.User) userRow {
 	return userRow{
-		ID:           user.ID,
-		Email:        user.Email,
-		PasswordHash: user.PasswordHash,
-		Name:         user.Name,
-		Role:         string(user.Role),
-		CustomerID:   user.CustomerID,
-		Status:       string(user.Status),
-		AuthVersion:  user.AuthVersion,
+		ID:               user.ID,
+		Email:            user.Email,
+		PasswordHash:     user.PasswordHash,
+		Name:             user.Name,
+		Role:             string(user.Role),
+		CustomerID:       user.CustomerID,
+		Status:           string(user.Status),
+		AuthVersion:      user.AuthVersion,
+		FailedLoginCount: user.FailedLoginCount,
+		LockedUntil:      timePtr(user.LockedUntil),
 	}
 }
 
 func userFromRow(row userRow) domain.User {
 	return domain.User{
-		ID:           row.ID,
-		Email:        row.Email,
-		PasswordHash: row.PasswordHash,
-		Name:         row.Name,
-		Role:         domain.Role(row.Role),
-		CustomerID:   row.CustomerID,
-		Status:       domain.AccountStatus(row.Status),
-		AuthVersion:  row.AuthVersion,
+		ID:               row.ID,
+		Email:            row.Email,
+		PasswordHash:     row.PasswordHash,
+		Name:             row.Name,
+		Role:             domain.Role(row.Role),
+		CustomerID:       row.CustomerID,
+		Status:           domain.AccountStatus(row.Status),
+		AuthVersion:      row.AuthVersion,
+		FailedLoginCount: row.FailedLoginCount,
+		LockedUntil:      timeValue(row.LockedUntil),
 	}
+}
+
+func timePtr(value time.Time) *time.Time {
+	if value.IsZero() {
+		return nil
+	}
+	return &value
+}
+
+func timeValue(value *time.Time) time.Time {
+	if value == nil {
+		return time.Time{}
+	}
+	return *value
 }

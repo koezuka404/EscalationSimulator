@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/mail"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -28,18 +29,23 @@ var (
 	ErrInvalidEmail    = errors.New("メールアドレスの形が違います。name@example.com のように入力してください")
 	ErrInvalidPassword = errors.New("パスワードは8文字以上15文字以内にして、英字と数字をそれぞれ1文字以上入れてください")
 	ErrEmailTaken      = errors.New("このメールアドレスはすでに使われています。別のメールアドレスを入力してください")
+	ErrUserNotFound    = errors.New("利用者が見つかりませんでした")
+	ErrLoginFailed     = errors.New("メールアドレスまたはパスワードが違います")
+	ErrLoginLocked     = errors.New("ログインの失敗が続いたため、しばらくログインできません。時間をおいてもう一度試してください")
 )
 
 // User はログインする人。保存先は知らない。
 type User struct {
-	ID           string
-	Email        string
-	PasswordHash string
-	Name         string
-	Role         Role
-	CustomerID   string
-	Status       AccountStatus
-	AuthVersion  int
+	ID               string
+	Email            string
+	PasswordHash     string
+	Name             string
+	Role             Role
+	CustomerID       string
+	Status           AccountStatus
+	AuthVersion      int
+	FailedLoginCount int
+	LockedUntil      time.Time
 }
 
 // NewApplicant は会員登録の申請者を作る。所属顧客は空。パスワードのハッシュは持たない。
@@ -90,4 +96,8 @@ func validatePassword(password string) error {
 		return ErrInvalidPassword
 	}
 	return nil
+}
+
+func (u User) Locked(now time.Time) bool {
+	return !u.LockedUntil.IsZero() && now.Before(u.LockedUntil)
 }

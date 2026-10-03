@@ -3,6 +3,7 @@ package controller
 import (
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -10,13 +11,25 @@ import (
 	"escalator/usecase"
 )
 
-// AuthAPI は会員登録を HTTP で受ける入口。
+// AuthAPI は会員登録とログインを HTTP で受ける入口。
 type AuthAPI struct {
-	signUp *usecase.SignUp
+	signUp            *usecase.SignUp
+	logIn             *usecase.LogIn
+	refreshCookieName string
+	csrfCookieName    string
+	cookieSecure      bool
+	refreshTTL        int
 }
 
-func NewAuthAPI(signUp *usecase.SignUp) *AuthAPI {
-	return &AuthAPI{signUp: signUp}
+func NewAuthAPI(signUp *usecase.SignUp, logIn *usecase.LogIn, refreshCookieName, csrfCookieName string, cookieSecure bool, refreshTTLSeconds int) *AuthAPI {
+	return &AuthAPI{
+		signUp:            signUp,
+		logIn:             logIn,
+		refreshCookieName: refreshCookieName,
+		csrfCookieName:    csrfCookieName,
+		cookieSecure:      cookieSecure,
+		refreshTTL:        refreshTTLSeconds,
+	}
 }
 
 func (a *AuthAPI) Register(c echo.Context) error {
@@ -31,10 +44,39 @@ func (a *AuthAPI) Register(c echo.Context) error {
 	return c.JSON(http.StatusCreated, toUserJSON(user))
 }
 
+func (a *AuthAPI) Login(c echo.Context) error {
+	var body loginJSON
+	if err := c.Bind(&body); err != nil {
+		return c.JSON(http.StatusBadRequest, messageJSON{Message: "送られた内容を読み取れませんでした。メールアドレスとパスワードを入力してください"})
+	}
+	result, err := a.logIn.Execute(c.Request().Context(), body.Email, body.Password)
+	if err != nil {
+		return writeLoginError(c, err)
+	}
+	c.SetCookie(sessionCookie(a.refreshCookieName, result.RefreshToken, a.refreshTTL, true, a.cookieSecure))
+	c.SetCookie(sessionCookie(a.csrfCookieName, result.CSRFToken, a.refreshTTL, false, a.cookieSecure))
+	return c.JSON(http.StatusOK, loginResponseJSON{
+		AccessToken: result.AccessToken,
+		ExpiresIn:   int(time.Until(result.ExpiresAt).Seconds()),
+		User:        toUserJSON(result.User),
+	})
+}
+
 type registerJSON struct {
 	Name     string `json:"name"`
 	Email    string `json:"email"`
 	Password string `json:"password"`
+}
+
+type loginJSON struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type loginResponseJSON struct {
+	AccessToken string   `json:"access_token"`
+	ExpiresIn   int      `json:"expires_in"`
+	User        userJSON `json:"user"`
 }
 
 type userJSON struct {
@@ -67,5 +109,28 @@ func writeSignUpError(c echo.Context, err error) error {
 		return c.JSON(http.StatusConflict, messageJSON{Message: err.Error()})
 	default:
 		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "登録できませんでした。しばらくしてから、もう一度試してください"})
+	}
+}
+
+func writeLoginError(c echo.Context, err error) error {
+	switch {
+	case errors.Is(err, domain.ErrLoginFailed):
+		return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})
+	case errors.Is(err, domain.ErrLoginLocked):
+		return c.JSON(http.StatusTooManyRequests, messageJSON{Message: err.Error()})
+	default:
+		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "ログインできませんでした。しばらくしてから、もう一度試してください"})
+	}
+}
+
+func sessionCookie(name, value string, maxAge int, httpOnly, secure bool) *http.Cookie {
+	return &http.Cookie{
+		Name:     name,
+		Value:    value,
+		Path:     "/",
+		MaxAge:   maxAge,
+		HttpOnly: httpOnly,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
 	}
 }

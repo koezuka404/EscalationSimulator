@@ -11,6 +11,7 @@ func Customers(e *echo.Echo, api *controller.CustomerAPI) {
 	e.PUT("/admin/customers/:id", api.Update)
 }
 
-func SignUp(e *echo.Echo, api *controller.AuthAPI) {
+func Auth(e *echo.Echo, api *controller.AuthAPI) {
 	e.POST("/api/auth/register", api.Register)
+	e.POST("/api/auth/login", api.Login)
 }
