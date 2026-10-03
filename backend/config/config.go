@@ -89,64 +89,64 @@ func (c Config) Validate() error {
 	var errs []error
 
 	if c.HTTPPort < 1 || c.HTTPPort > 65535 {
-		errs = append(errs, fmt.Errorf("HTTP_PORT must be between 1 and 65535"))
+		errs = append(errs, fmt.Errorf("HTTP_PORT は1から65535の番号にしてください。画面から呼び出す入口のポートです"))
 	}
 	if c.DatabaseURL == "" {
-		errs = append(errs, fmt.Errorf("DATABASE_URL is required"))
+		errs = append(errs, fmt.Errorf("DATABASE_URL を設定してください。データベースの接続先です"))
 	} else if _, err := url.Parse(c.DatabaseURL); err != nil || !strings.Contains(c.DatabaseURL, "://") {
-		errs = append(errs, fmt.Errorf("DATABASE_URL is invalid"))
+		errs = append(errs, fmt.Errorf("DATABASE_URL の形が違います。データベースの接続先を確認してください"))
 	}
 	if c.RedisURL == "" {
-		errs = append(errs, fmt.Errorf("REDIS_URL is required"))
+		errs = append(errs, fmt.Errorf("REDIS_URL を設定してください。待ち順の保存先です"))
 	} else if _, err := url.Parse(c.RedisURL); err != nil || !strings.Contains(c.RedisURL, "://") {
-		errs = append(errs, fmt.Errorf("REDIS_URL is invalid"))
+		errs = append(errs, fmt.Errorf("REDIS_URL の形が違います。待ち順の保存先を確認してください"))
 	}
 	if len([]byte(c.JWTSecret)) < 32 {
-		errs = append(errs, fmt.Errorf("JWT_SECRET must be at least 32 bytes"))
+		errs = append(errs, fmt.Errorf("JWT_SECRET は32文字以上にしてください。ログイン用の秘密の文字列です"))
 	}
 	if strings.TrimSpace(c.JWTIssuer) == "" {
-		errs = append(errs, fmt.Errorf("JWT_ISSUER is required"))
+		errs = append(errs, fmt.Errorf("JWT_ISSUER を設定してください。ログイン情報の発行元の名前です"))
 	}
 	if strings.TrimSpace(c.JWTAudience) == "" {
-		errs = append(errs, fmt.Errorf("JWT_AUDIENCE is required"))
+		errs = append(errs, fmt.Errorf("JWT_AUDIENCE を設定してください。ログイン情報の宛先の名前です"))
 	}
 	if c.AccessTokenTTL <= 0 || c.AccessTokenTTL > 24*time.Hour {
-		errs = append(errs, fmt.Errorf("ACCESS_TOKEN_TTL_MINUTES must be greater than 0 and no more than 1440"))
+		errs = append(errs, fmt.Errorf("ACCESS_TOKEN_TTL_MINUTES は1分以上、1440分（24時間）以内にしてください。ログインの有効時間です"))
 	}
 	if c.RefreshTokenTTL <= c.AccessTokenTTL {
-		errs = append(errs, fmt.Errorf("refresh token lifetime must be greater than the access token lifetime"))
+		errs = append(errs, fmt.Errorf("再ログインできる時間は、ログインの有効時間より長くしてください"))
 	}
 	if c.BcryptCost < 10 || c.BcryptCost > 16 {
-		errs = append(errs, fmt.Errorf("BCRYPT_COST must be between 10 and 16"))
+		errs = append(errs, fmt.Errorf("BCRYPT_COST は10から16の間にしてください。パスワードを保存するときの強さです"))
 	}
 	if c.Environment == EnvironmentProduction && !c.CookieSecure {
-		errs = append(errs, fmt.Errorf("COOKIE_SECURE must be true in production"))
+		errs = append(errs, fmt.Errorf("本番では COOKIE_SECURE を true にしてください。再ログイン用の印を保護します"))
 	}
 	if strings.TrimSpace(c.RefreshTokenCookieName) == "" {
-		errs = append(errs, fmt.Errorf("REFRESH_TOKEN_COOKIE_NAME is required"))
+		errs = append(errs, fmt.Errorf("REFRESH_TOKEN_COOKIE_NAME を設定してください。再ログイン用の印の名前です"))
 	}
 	if strings.TrimSpace(c.CSRFTokenCookieName) == "" {
-		errs = append(errs, fmt.Errorf("CSRF_TOKEN_COOKIE_NAME is required"))
+		errs = append(errs, fmt.Errorf("CSRF_TOKEN_COOKIE_NAME を設定してください。操作確認用の印の名前です"))
 	}
 	if c.LoginMaxFailures < 1 {
-		errs = append(errs, fmt.Errorf("LOGIN_MAX_FAILURES must be greater than 0"))
+		errs = append(errs, fmt.Errorf("LOGIN_MAX_FAILURES は1以上にしてください。ログイン失敗を何回まで許すかの回数です"))
 	}
 	if c.LoginLock <= 0 {
-		errs = append(errs, fmt.Errorf("LOGIN_LOCK_SECONDS must be greater than 0"))
+		errs = append(errs, fmt.Errorf("LOGIN_LOCK_SECONDS は1秒以上にしてください。ログインを止めておく時間です"))
 	}
 	if c.PriorityRecalc <= 0 {
-		errs = append(errs, fmt.Errorf("PRIORITY_RECALC_SECONDS must be greater than 0"))
+		errs = append(errs, fmt.Errorf("PRIORITY_RECALC_SECONDS は1秒以上にしてください。点数をやり直す間隔です"))
 	}
 	if c.AgentDisconnectGrace <= 0 {
-		errs = append(errs, fmt.Errorf("AGENT_DISCONNECT_GRACE_SECONDS must be greater than 0"))
+		errs = append(errs, fmt.Errorf("AGENT_DISCONNECT_GRACE_SECONDS は1秒以上にしてください。担当者の接続が切れてから外すまでの時間です"))
 	}
 	if c.CORSAllowedOrigin == "" {
-		errs = append(errs, fmt.Errorf("CORS_ALLOWED_ORIGIN is required"))
+		errs = append(errs, fmt.Errorf("CORS_ALLOWED_ORIGIN を設定してください。画面のアドレスです"))
 	} else if err := validateOrigin(c.Environment, c.CORSAllowedOrigin); err != nil {
 		errs = append(errs, err)
 	}
 	if strings.TrimSpace(c.RedisPubSubChannelPrefix) == "" {
-		errs = append(errs, fmt.Errorf("REDIS_PUBSUB_CHANNEL_PREFIX is required"))
+		errs = append(errs, fmt.Errorf("REDIS_PUBSUB_CHANNEL_PREFIX を設定してください。画面へ知らせを渡す名前の先頭です"))
 	}
 
 	return errors.Join(errs...)
@@ -155,10 +155,10 @@ func (c Config) Validate() error {
 func validateOrigin(environment Environment, origin string) error {
 	parsed, err := url.Parse(origin)
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
-		return fmt.Errorf("CORS_ALLOWED_ORIGIN must include a scheme and host")
+		return fmt.Errorf("CORS_ALLOWED_ORIGIN は http:// または https:// から始まるアドレスにしてください")
 	}
 	if environment == EnvironmentProduction && parsed.Scheme != "https" {
-		return fmt.Errorf("CORS_ALLOWED_ORIGIN must be HTTPS in production")
+		return fmt.Errorf("本番の画面アドレスは https:// から始めてください")
 	}
 	return nil
 }
@@ -193,7 +193,7 @@ func parseEnvironment(raw string) (Environment, error) {
 	case EnvironmentProduction:
 		return EnvironmentProduction, nil
 	default:
-		return "", fmt.Errorf("APP_ENV must be development or production")
+		return "", fmt.Errorf("APP_ENV は development か production にしてください。開発中か本番かを表します")
 	}
 }
 

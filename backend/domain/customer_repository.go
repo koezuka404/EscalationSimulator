@@ -5,7 +5,7 @@ import (
 	"errors"
 )
 
-var ErrCustomerNotFound = errors.New("顧客が見つかりません")
+var ErrCustomerNotFound = errors.New("指定した顧客は見つかりませんでした")
 
 // CustomerRepository は顧客の保存窓口。実装は外側が持つ。
 type CustomerRepository interface {

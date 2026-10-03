@@ -8,8 +8,8 @@ import (
 const WaitMinutesCap = 99
 
 var (
-	ErrInvalidSeverity  = errors.New("緊急度は1〜4です")
-	ErrInvalidPlanScore = errors.New("プラン点数は1〜3です")
+	ErrInvalidSeverity  = errors.New("緊急度は1、2、3、4のどれかを選んでください")
+	ErrInvalidPlanScore = errors.New("プランの点数は1、2、3のどれかにしてください")
 )
 
 // PriorityScore は待ち順の点数を返す。保存先も順番メモリも知らない。
@@ -35,6 +35,19 @@ func PriorityScore(severity, planScore int, createdAt, now time.Time, slaMinutes
 		waited = WaitMinutesCap
 	}
 	return severity*1_000_000 + overdue*10_000 + planScore*100 + waited, nil
+}
+
+// SameScoreFirst は点数が同じとき、a を b より先にするかを返す。
+// 作った時刻が早い方を先にする。時刻も同じなら ID が小さい方を先にする。
+// 保存先も順番メモリも知らない。
+func SameScoreFirst(createdA time.Time, idA string, createdB time.Time, idB string) bool {
+	if createdA.Before(createdB) {
+		return true
+	}
+	if createdB.Before(createdA) {
+		return false
+	}
+	return idA < idB
 }
 
 func elapsedMinutes(createdAt, now time.Time) int {

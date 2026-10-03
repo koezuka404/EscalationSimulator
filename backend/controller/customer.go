@@ -34,7 +34,7 @@ func (a *CustomerAPI) List(c echo.Context) error {
 func (a *CustomerAPI) Update(c echo.Context) error {
 	var body updateCustomerJSON
 	if err := c.Bind(&body); err != nil {
-		return c.JSON(http.StatusBadRequest, messageJSON{Message: "リクエストの形式が正しくありません"})
+		return c.JSON(http.StatusBadRequest, messageJSON{Message: "送られた内容を読み取れませんでした。顧客名、プラン、目標時間を入力してください"})
 	}
 	customer, err := a.customers.Update(
 		c.Request().Context(),
@@ -84,6 +84,6 @@ func writeCustomerError(c echo.Context, err error) error {
 		errors.Is(err, domain.ErrInvalidSLAMinutes):
 		return c.JSON(http.StatusBadRequest, messageJSON{Message: err.Error()})
 	default:
-		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "顧客を処理できません"})
+		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "顧客を保存できませんでした。しばらくしてから、もう一度試してください"})
 	}
 }

@@ -14,9 +14,9 @@ const (
 )
 
 var (
-	ErrInvalidCustomerName = errors.New("顧客名は1〜100文字です")
-	ErrInvalidPlan         = errors.New("プランは Free、Pro、Enterprise のいずれかです")
-	ErrInvalidSLAMinutes   = errors.New("目標時間は1〜1440分です")
+	ErrInvalidCustomerName = errors.New("顧客名は1文字以上、100文字以内で入力してください")
+	ErrInvalidPlan         = errors.New("プランは Free、Pro、Enterprise のどれかを選んでください")
+	ErrInvalidSLAMinutes   = errors.New("初めて担当が付くまでの目標時間は、1分から24時間（1440分）の間で入力してください")
 )
 
 // Customer は社外の契約先。保存先は知らない。

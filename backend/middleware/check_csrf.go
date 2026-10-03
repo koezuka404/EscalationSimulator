@@ -8,7 +8,7 @@ import (
 
 const CSRFHeaderName = "X-CSRF-Token"
 
-var ErrCSRFRejected = errors.New("リクエストを確認できません")
+var ErrCSRFRejected = errors.New("この操作を確認できませんでした。ページを開き直してから、もう一度試してください")
 
 // Allow は再発行とログアウトで使う。
 // Sec-Fetch-Site が same-origin または same-site であり、
