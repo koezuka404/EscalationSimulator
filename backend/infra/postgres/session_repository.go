@@ -2,10 +2,12 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"escalator/domain"
 )
@@ -50,4 +52,41 @@ func (r *SessionRepository) Save(ctx context.Context, session domain.Session) er
 
 func (r *SessionRepository) RevokeByHash(ctx context.Context, tokenHash string) error {
 	return r.db.WithContext(ctx).Model(&sessionRow{}).Where("token_hash = ?", tokenHash).Update("revoked", true).Error
+}
+
+func (r *SessionRepository) Rotate(ctx context.Context, oldHash string, next domain.Session, now time.Time) (string, bool, error) {
+	var userID string
+	var reused bool
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var row sessionRow
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("token_hash = ?", oldHash).First(&row).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return domain.ErrInvalidRefresh
+		}
+		if err != nil {
+			return err
+		}
+		userID = row.UserID
+		if row.Revoked {
+			reused = true
+			return tx.Model(&sessionRow{}).Where("family_id = ?", row.FamilyID).Update("revoked", true).Error
+		}
+		if !row.ExpiresAt.After(now) {
+			return domain.ErrInvalidRefresh
+		}
+		if err := tx.Model(&sessionRow{}).Where("id = ?", row.ID).Update("revoked", true).Error; err != nil {
+			return err
+		}
+		if next.ID == "" {
+			next.ID = uuid.NewString()
+		}
+		return tx.Create(&sessionRow{
+			ID:        next.ID,
+			UserID:    row.UserID,
+			TokenHash: next.TokenHash,
+			FamilyID:  row.FamilyID,
+			ExpiresAt: next.ExpiresAt,
+		}).Error
+	})
+	return userID, reused, err
 }

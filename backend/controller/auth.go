@@ -17,17 +17,19 @@ type AuthAPI struct {
 	signUp            *usecase.SignUp
 	logIn             *usecase.LogIn
 	logOut            *usecase.LogOut
+	refresh           *usecase.Refresh
 	refreshCookieName string
 	csrfCookieName    string
 	cookieSecure      bool
 	refreshTTL        int
 }
 
-func NewAuthAPI(signUp *usecase.SignUp, logIn *usecase.LogIn, logOut *usecase.LogOut, refreshCookieName, csrfCookieName string, cookieSecure bool, refreshTTLSeconds int) *AuthAPI {
+func NewAuthAPI(signUp *usecase.SignUp, logIn *usecase.LogIn, logOut *usecase.LogOut, refresh *usecase.Refresh, refreshCookieName, csrfCookieName string, cookieSecure bool, refreshTTLSeconds int) *AuthAPI {
 	return &AuthAPI{
 		signUp:            signUp,
 		logIn:             logIn,
 		logOut:            logOut,
+		refresh:           refresh,
 		refreshCookieName: refreshCookieName,
 		csrfCookieName:    csrfCookieName,
 		cookieSecure:      cookieSecure,
@@ -81,6 +83,27 @@ func (a *AuthAPI) Logout(c echo.Context) error {
 	return c.JSON(http.StatusOK, messageJSON{Message: "ログアウトしました"})
 }
 
+func (a *AuthAPI) Refresh(c echo.Context) error {
+	if err := middleware.Allow(c.Request(), a.csrfCookieName); err != nil {
+		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
+	}
+	refreshToken := ""
+	if cookie, err := c.Cookie(a.refreshCookieName); err == nil {
+		refreshToken = cookie.Value
+	}
+	result, err := a.refresh.Execute(c.Request().Context(), refreshToken)
+	if err != nil {
+		return writeRefreshError(c, a, err)
+	}
+	c.SetCookie(sessionCookie(a.refreshCookieName, result.RefreshToken, a.refreshTTL, true, a.cookieSecure))
+	c.SetCookie(sessionCookie(a.csrfCookieName, result.CSRFToken, a.refreshTTL, false, a.cookieSecure))
+	return c.JSON(http.StatusOK, loginResponseJSON{
+		AccessToken: result.AccessToken,
+		ExpiresIn:   int(time.Until(result.ExpiresAt).Seconds()),
+		User:        toUserJSON(result.User),
+	})
+}
+
 type registerJSON struct {
 	Name     string `json:"name"`
 	Email    string `json:"email"`
@@ -129,6 +152,15 @@ func writeSignUpError(c echo.Context, err error) error {
 	default:
 		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "登録できませんでした。しばらくしてから、もう一度試してください"})
 	}
+}
+
+func writeRefreshError(c echo.Context, api *AuthAPI, err error) error {
+	if errors.Is(err, domain.ErrInvalidRefresh) {
+		c.SetCookie(sessionCookie(api.refreshCookieName, "", -1, true, api.cookieSecure))
+		c.SetCookie(sessionCookie(api.csrfCookieName, "", -1, false, api.cookieSecure))
+		return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})
+	}
+	return c.JSON(http.StatusInternalServerError, messageJSON{Message: "ログインを延長できませんでした。もう一度ログインしてください"})
 }
 
 func writeLoginError(c echo.Context, err error) error {

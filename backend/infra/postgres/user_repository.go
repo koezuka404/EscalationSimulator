@@ -56,6 +56,18 @@ func (r *UserRepository) Save(ctx context.Context, user domain.User) (domain.Use
 	return userFromRow(row), nil
 }
 
+func (r *UserRepository) FindByID(ctx context.Context, id string) (domain.User, error) {
+	var row userRow
+	err := r.db.WithContext(ctx).First(&row, "id = ?", id).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return domain.User{}, domain.ErrUserNotFound
+	}
+	if err != nil {
+		return domain.User{}, err
+	}
+	return userFromRow(row), nil
+}
+
 func (r *UserRepository) FindByEmail(ctx context.Context, email string) (domain.User, error) {
 	var row userRow
 	err := r.db.WithContext(ctx).First(&row, "email = ?", email).Error
@@ -79,6 +91,10 @@ func (r *UserRepository) UpdateLoginState(ctx context.Context, user domain.User)
 		"failed_login_count": user.FailedLoginCount,
 		"locked_until":       lockedUntil,
 	}).Error
+}
+
+func (r *UserRepository) BumpAuthVersion(ctx context.Context, id string) error {
+	return r.db.WithContext(ctx).Model(&userRow{}).Where("id = ?", id).Update("auth_version", gorm.Expr("auth_version + 1")).Error
 }
 
 func userToRow(user domain.User) userRow {

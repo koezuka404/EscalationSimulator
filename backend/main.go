@@ -71,6 +71,7 @@ func main() {
 		usecase.NewSignUp(users, cfg.BcryptCost),
 		usecase.NewLogIn(users, sessions, []byte(cfg.JWTSecret), cfg.JWTIssuer, cfg.JWTAudience, cfg.AccessTokenTTL, cfg.RefreshTokenTTL, cfg.LoginMaxFailures, cfg.LoginLock),
 		usecase.NewLogOut(sessions),
+		usecase.NewRefresh(users, sessions, []byte(cfg.JWTSecret), cfg.JWTIssuer, cfg.JWTAudience, cfg.AccessTokenTTL, cfg.RefreshTokenTTL),
 		cfg.RefreshTokenCookieName,
 		cfg.CSRFTokenCookieName,
 		cfg.CookieSecure,
