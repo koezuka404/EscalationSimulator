@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -32,6 +33,20 @@ func IssueAccess(secret []byte, issuer, audience, userID string, authVersion int
 		return "", time.Time{}, err
 	}
 	return signed, expiresAt, nil
+}
+
+func ParseAccess(secret []byte, issuer, audience, raw string) (string, int, error) {
+	claims := &accessClaims{}
+	parsed, err := jwt.ParseWithClaims(raw, claims, func(t *jwt.Token) (any, error) {
+		if t.Method != jwt.SigningMethodHS256 {
+			return nil, errors.New("署名の方式が違います")
+		}
+		return secret, nil
+	}, jwt.WithIssuer(issuer), jwt.WithAudience(audience), jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
+	if err != nil || parsed == nil || !parsed.Valid || claims.Subject == "" {
+		return "", 0, err
+	}
+	return claims.Subject, claims.Ver, nil
 }
 
 func NewSecretToken() (raw, hash string, err error) {

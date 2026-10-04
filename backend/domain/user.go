@@ -33,6 +33,7 @@ var (
 	ErrLoginFailed     = errors.New("メールアドレスまたはパスワードが違います")
 	ErrLoginLocked     = errors.New("ログインの失敗が続いたため、しばらくログインできません。時間をおいてもう一度試してください")
 	ErrInvalidRefresh  = errors.New("ログインの期限が切れています。もう一度ログインしてください")
+	ErrUnauthenticated = errors.New("ログインが必要です。もう一度ログインしてください")
 )
 
 // User はログインする人。保存先は知らない。
