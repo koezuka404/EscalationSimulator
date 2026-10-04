@@ -11,6 +11,10 @@ func Customers(e *echo.Echo, api *controller.CustomerAPI) {
 	e.PUT("/admin/customers/:id", api.Update)
 }
 
+func Users(e *echo.Echo, api *controller.UserAPI) {
+	e.PATCH("/api/users/:id", api.LinkCustomer)
+}
+
 func Me(e *echo.Echo, api *controller.MeAPI) {
 	e.GET("/api/me", api.Show)
 }

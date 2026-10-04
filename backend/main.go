@@ -67,7 +67,9 @@ func main() {
 	users := postgres.NewUserRepository(db)
 	sessions := postgres.NewSessionRepository(db)
 	router.Customers(e, controller.NewCustomerAPI(usecase.NewCustomers(postgres.NewCustomerRepository(db))))
-	router.Me(e, controller.NewMeAPI(usecase.NewCurrentUser(users, []byte(cfg.JWTSecret), cfg.JWTIssuer, cfg.JWTAudience)))
+	current := usecase.NewCurrentUser(users, []byte(cfg.JWTSecret), cfg.JWTIssuer, cfg.JWTAudience)
+	router.Me(e, controller.NewMeAPI(current))
+	router.Users(e, controller.NewUserAPI(usecase.NewLinkApplicant(users, postgres.NewCustomerRepository(db), current)))
 	router.Auth(e, controller.NewAuthAPI(
 		usecase.NewSignUp(users, cfg.BcryptCost),
 		usecase.NewLogIn(users, sessions, []byte(cfg.JWTSecret), cfg.JWTIssuer, cfg.JWTAudience, cfg.AccessTokenTTL, cfg.RefreshTokenTTL, cfg.LoginMaxFailures, cfg.LoginLock),

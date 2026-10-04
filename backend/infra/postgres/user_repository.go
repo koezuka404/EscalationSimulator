@@ -93,6 +93,20 @@ func (r *UserRepository) UpdateLoginState(ctx context.Context, user domain.User)
 	}).Error
 }
 
+func (r *UserRepository) UpdateCustomer(ctx context.Context, user domain.User) error {
+	result := r.db.WithContext(ctx).Model(&userRow{}).Where("id = ?", user.ID).Updates(map[string]any{
+		"customer_id":  user.CustomerID,
+		"auth_version": user.AuthVersion,
+	})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return domain.ErrUserNotFound
+	}
+	return nil
+}
+
 func (r *UserRepository) BumpAuthVersion(ctx context.Context, id string) error {
 	return r.db.WithContext(ctx).Model(&userRow{}).Where("id = ?", id).Update("auth_version", gorm.Expr("auth_version + 1")).Error
 }

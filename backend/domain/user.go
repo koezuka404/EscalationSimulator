@@ -34,6 +34,9 @@ var (
 	ErrLoginLocked     = errors.New("ログインの失敗が続いたため、しばらくログインできません。時間をおいてもう一度試してください")
 	ErrInvalidRefresh  = errors.New("ログインの期限が切れています。もう一度ログインしてください")
 	ErrUnauthenticated = errors.New("ログインが必要です。もう一度ログインしてください")
+	ErrForbidden       = errors.New("この操作は管理者だけができます")
+	ErrNotApplicant    = errors.New("顧客を結びつけられるのは申請者だけです")
+	ErrCustomerLink    = errors.New("結びつける顧客を選んでください")
 )
 
 // User はログインする人。保存先は知らない。
@@ -102,4 +105,20 @@ func validatePassword(password string) error {
 
 func (u User) Locked(now time.Time) bool {
 	return !u.LockedUntil.IsZero() && now.Before(u.LockedUntil)
+}
+
+// LinkCustomer は申請者を1つの顧客に結びつける。変わったときは認証の版を1つ上げる。
+func (u User) LinkCustomer(customerID string) (User, error) {
+	if u.Role != RoleApplicant {
+		return User{}, ErrNotApplicant
+	}
+	if strings.TrimSpace(customerID) == "" {
+		return User{}, ErrCustomerLink
+	}
+	if u.CustomerID == customerID {
+		return u, nil
+	}
+	u.CustomerID = customerID
+	u.AuthVersion++
+	return u, nil
 }
