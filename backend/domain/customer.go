@@ -19,7 +19,6 @@ var (
 	ErrInvalidSLAMinutes   = errors.New("初めて担当が付くまでの目標時間は、1分から24時間（1440分）の間で入力してください")
 )
 
-// Customer は社外の契約先。保存先は知らない。
 type Customer struct {
 	ID         string
 	Name       string
@@ -27,6 +26,7 @@ type Customer struct {
 	SLAMinutes int
 }
 
+//名前、プラン、目標時間を確かめて顧客を作る
 func NewCustomer(name string, plan Plan, slaMinutes int) (Customer, error) {
 	if utf8.RuneCountInString(name) < 1 || utf8.RuneCountInString(name) > 100 {
 		return Customer{}, ErrInvalidCustomerName
@@ -40,6 +40,7 @@ func NewCustomer(name string, plan Plan, slaMinutes int) (Customer, error) {
 	return Customer{Name: name, Plan: plan, SLAMinutes: slaMinutes}, nil
 }
 
+//プランごとの初期の目標時間を返す
 func DefaultSLAMinutes(plan Plan) (int, error) {
 	switch plan {
 	case PlanFree:
@@ -53,7 +54,7 @@ func DefaultSLAMinutes(plan Plan) (int, error) {
 	}
 }
 
-// PlanScore は点数計算用のプラン点数を返す。
+//プランを点数にするFreeは1、Proは2、Enterpriseは3
 func (c Customer) PlanScore() (int, error) {
 	return planScore(c.Plan)
 }

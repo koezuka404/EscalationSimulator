@@ -13,7 +13,6 @@ import (
 	"escalator/infra/token"
 )
 
-// LogIn はメールアドレスとパスワードを確かめ、ログイン用のトークンを出す。
 type LogIn struct {
 	users       domain.UserRepository
 	sessions    domain.SessionRepository
@@ -48,6 +47,7 @@ func NewLogIn(users domain.UserRepository, sessions domain.SessionRepository, se
 	}
 }
 
+//メールアドレスとパスワードを確かめ、ログインする
 func (l *LogIn) Execute(ctx context.Context, email, password string) (LoginResult, error) {
 	now := time.Now()
 	user, err := l.users.FindByEmail(ctx, normalizeEmail(email))

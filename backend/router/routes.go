@@ -19,6 +19,10 @@ func Tickets(e *echo.Echo, api *controller.TicketAPI) {
 	e.POST("/api/tickets", api.Create)
 }
 
+func Queue(e *echo.Echo, api *controller.QueueAPI) {
+	e.GET("/api/queue", api.List)
+}
+
 func Me(e *echo.Echo, api *controller.MeAPI) {
 	e.GET("/api/me", api.Show)
 }

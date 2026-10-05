@@ -10,7 +10,6 @@ import (
 	"escalator/usecase"
 )
 
-// MeAPI は今ログインしている人を返す。
 type MeAPI struct {
 	current *usecase.CurrentUser
 }
@@ -19,6 +18,7 @@ func NewMeAPI(current *usecase.CurrentUser) *MeAPI {
 	return &MeAPI{current: current}
 }
 
+//今ログインしている人を返す
 func (a *MeAPI) Show(c echo.Context) error {
 	user, err := a.current.Execute(c.Request().Context(), c.Request().Header.Get("Authorization"))
 	if err != nil {

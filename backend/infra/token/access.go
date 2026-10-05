@@ -16,6 +16,7 @@ type accessClaims struct {
 	jwt.RegisteredClaims
 }
 
+//ログイン用トークンを発行する
 func IssueAccess(secret []byte, issuer, audience, userID string, authVersion int, ttl time.Duration, now time.Time) (string, time.Time, error) {
 	expiresAt := now.Add(ttl)
 	claims := accessClaims{
@@ -35,6 +36,7 @@ func IssueAccess(secret []byte, issuer, audience, userID string, authVersion int
 	return signed, expiresAt, nil
 }
 
+//ログイン用トークンから利用者IDと認証の版を取る
 func ParseAccess(secret []byte, issuer, audience, raw string) (string, int, error) {
 	claims := &accessClaims{}
 	parsed, err := jwt.ParseWithClaims(raw, claims, func(t *jwt.Token) (any, error) {

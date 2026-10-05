@@ -10,7 +10,6 @@ import (
 	"escalator/usecase"
 )
 
-// UserAPI は申請者を顧客に結びつける。
 type UserAPI struct {
 	link *usecase.LinkApplicant
 }
@@ -19,6 +18,7 @@ func NewUserAPI(link *usecase.LinkApplicant) *UserAPI {
 	return &UserAPI{link: link}
 }
 
+//申請者を顧客に結びつける
 func (a *UserAPI) LinkCustomer(c echo.Context) error {
 	var body linkCustomerJSON
 	if err := c.Bind(&body); err != nil {

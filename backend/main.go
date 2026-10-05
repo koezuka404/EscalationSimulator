@@ -19,6 +19,7 @@ import (
 	"escalator/usecase"
 )
 
+//設定を読み、データベースと待ち順につないでサーバーを起動する
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
@@ -76,7 +77,9 @@ func main() {
 	current := usecase.NewCurrentUser(users, []byte(cfg.JWTSecret), cfg.JWTIssuer, cfg.JWTAudience)
 	router.Me(e, controller.NewMeAPI(current))
 	router.Users(e, controller.NewUserAPI(usecase.NewLinkApplicant(users, customers, current)))
-	router.Tickets(e, controller.NewTicketAPI(usecase.NewCreateTicket(postgres.NewTicketRepository(db), customers, current, order)))
+	tickets := postgres.NewTicketRepository(db)
+	router.Tickets(e, controller.NewTicketAPI(usecase.NewCreateTicket(tickets, customers, current, order)))
+	router.Queue(e, controller.NewQueueAPI(usecase.NewListWaitingTickets(tickets, customers, current)))
 	router.Auth(e, controller.NewAuthAPI(
 		usecase.NewSignUp(users, cfg.BcryptCost),
 		usecase.NewLogIn(users, sessions, []byte(cfg.JWTSecret), cfg.JWTIssuer, cfg.JWTAudience, cfg.AccessTokenTTL, cfg.RefreshTokenTTL, cfg.LoginMaxFailures, cfg.LoginLock),

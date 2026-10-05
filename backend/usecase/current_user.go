@@ -8,7 +8,6 @@ import (
 	"escalator/infra/token"
 )
 
-// CurrentUser はログイン用トークンから、今の利用者を取る。
 type CurrentUser struct {
 	users    domain.UserRepository
 	secret   []byte
@@ -20,6 +19,7 @@ func NewCurrentUser(users domain.UserRepository, secret []byte, issuer, audience
 	return &CurrentUser{users: users, secret: secret, issuer: issuer, audience: audience}
 }
 
+//ログイン用トークンから、今の利用者を取る
 func (c *CurrentUser) Execute(ctx context.Context, authorization string) (domain.User, error) {
 	raw := bearerToken(authorization)
 	if raw == "" {

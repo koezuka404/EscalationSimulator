@@ -10,9 +10,7 @@ const CSRFHeaderName = "X-CSRF-Token"
 
 var ErrCSRFRejected = errors.New("この操作を確認できませんでした。ページを開き直してから、もう一度試してください")
 
-// Allow は再発行とログアウトで使う。
-// Sec-Fetch-Site が same-origin または same-site であり、
-// CSRF 用 Cookie と X-CSRF-Token が一致するときだけ通す。
+//再発行とログアウトで、操作の出どころと確認用の印を確かめる
 func Allow(r *http.Request, cookieName string) error {
 	switch r.Header.Get("Sec-Fetch-Site") {
 	case "same-origin", "same-site":

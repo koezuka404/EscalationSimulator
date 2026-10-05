@@ -11,7 +11,6 @@ import (
 	"escalator/usecase"
 )
 
-// TicketAPI は申請者のチケット起票を受ける。
 type TicketAPI struct {
 	create *usecase.CreateTicket
 }
@@ -20,6 +19,7 @@ func NewTicketAPI(create *usecase.CreateTicket) *TicketAPI {
 	return &TicketAPI{create: create}
 }
 
+//チケットの起票を受ける
 func (a *TicketAPI) Create(c echo.Context) error {
 	var body createTicketJSON
 	if err := c.Bind(&body); err != nil {

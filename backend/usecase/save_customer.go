@@ -6,7 +6,6 @@ import (
 	"escalator/domain"
 )
 
-// Customers は顧客の一覧と更新を行う。
 type Customers struct {
 	repo domain.CustomerRepository
 }
@@ -15,10 +14,12 @@ func NewCustomers(repo domain.CustomerRepository) *Customers {
 	return &Customers{repo: repo}
 }
 
+//顧客の一覧を返す
 func (c *Customers) List(ctx context.Context) ([]domain.Customer, error) {
 	return c.repo.List(ctx)
 }
 
+//顧客の名前、プラン、目標時間を更新する
 func (c *Customers) Update(ctx context.Context, id, name string, plan domain.Plan, slaMinutes int) (domain.Customer, error) {
 	if _, err := c.repo.FindByID(ctx, id); err != nil {
 		return domain.Customer{}, err

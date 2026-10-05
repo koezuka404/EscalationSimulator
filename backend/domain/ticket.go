@@ -32,6 +32,7 @@ var (
 	ErrTicketApplicant    = errors.New("チケットを起票できるのは申請者だけです")
 	ErrCustomerRequired   = errors.New("所属顧客が設定されていません")
 	ErrTicketNotFound     = errors.New("チケットが見つかりませんでした")
+	ErrQueueForbidden     = errors.New("待ち順を見られるのは担当者と管理者だけです")
 )
 
 type Ticket struct {
@@ -48,6 +49,7 @@ type Ticket struct {
 	CreatedAt     time.Time
 }
 
+//件名、詳細、種類、緊急度を確かめて、対応待ちのチケットを作る
 func NewTicket(customerID, createdBy, title, description string, severity int, category Category, createdAt time.Time) (Ticket, error) {
 	title = strings.TrimSpace(title)
 	description = strings.TrimSpace(description)

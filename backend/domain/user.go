@@ -39,7 +39,6 @@ var (
 	ErrCustomerLink    = errors.New("結びつける顧客を選んでください")
 )
 
-// User はログインする人。保存先は知らない。
 type User struct {
 	ID               string
 	Email            string
@@ -53,7 +52,7 @@ type User struct {
 	LockedUntil      time.Time
 }
 
-// NewApplicant は会員登録の申請者を作る。所属顧客は空。パスワードのハッシュは持たない。
+//会員登録用の申請者を作る所属顧客は空
 func NewApplicant(name, email, password string) (User, error) {
 	name = strings.TrimSpace(name)
 	email = strings.ToLower(strings.TrimSpace(email))
@@ -103,11 +102,12 @@ func validatePassword(password string) error {
 	return nil
 }
 
+//ログインを止めている時間内かを返す
 func (u User) Locked(now time.Time) bool {
 	return !u.LockedUntil.IsZero() && now.Before(u.LockedUntil)
 }
 
-// LinkCustomer は申請者を1つの顧客に結びつける。変わったときは認証の版を1つ上げる。
+//申請者を1つの顧客に結びつけ、変わったときは認証の版を上げる
 func (u User) LinkCustomer(customerID string) (User, error) {
 	if u.Role != RoleApplicant {
 		return User{}, ErrNotApplicant

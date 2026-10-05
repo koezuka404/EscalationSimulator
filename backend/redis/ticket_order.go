@@ -9,11 +9,11 @@ import (
 
 const ticketQueueKey = "queue:tickets"
 
-// TicketOrder は対応待ちのチケット ID を点数つきで持つ。
 type TicketOrder struct {
 	client *goredis.Client
 }
 
+//待ち順の保存先へつなぐ
 func Open(rawURL string) (*TicketOrder, error) {
 	opt, err := goredis.ParseURL(rawURL)
 	if err != nil {
@@ -33,7 +33,7 @@ func (o *TicketOrder) Close() error {
 	return o.client.Close()
 }
 
-// Enqueue はチケットを待ち順へ載せる。点数は計算した点数のまま入れる。
+//チケットのIDと点数を待ち順へ載せる
 func (o *TicketOrder) Enqueue(ctx context.Context, ticketID string, score int) error {
 	return o.client.ZAdd(ctx, ticketQueueKey, goredis.Z{
 		Score:  float64(score),

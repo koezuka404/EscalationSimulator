@@ -8,7 +8,6 @@ import (
 	"escalator/infra/token"
 )
 
-// Refresh は再ログイン用の印を新しい印に替え、ログイン用トークンを出し直す。
 type Refresh struct {
 	users      domain.UserRepository
 	sessions   domain.SessionRepository
@@ -31,6 +30,7 @@ func NewRefresh(users domain.UserRepository, sessions domain.SessionRepository, 
 	}
 }
 
+//再ログイン用の印を新しい印に替え、ログイン用トークンを出し直す
 func (r *Refresh) Execute(ctx context.Context, refreshToken string) (LoginResult, error) {
 	if refreshToken == "" {
 		return LoginResult{}, domain.ErrInvalidRefresh

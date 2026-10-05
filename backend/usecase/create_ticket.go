@@ -8,7 +8,6 @@ import (
 	"escalator/domain"
 )
 
-// CreateTicket は申請者がチケットを起票する。顧客とプランは所属から取る。
 type CreateTicket struct {
 	tickets   domain.TicketRepository
 	customers domain.CustomerRepository
@@ -20,6 +19,7 @@ func NewCreateTicket(tickets domain.TicketRepository, customers domain.CustomerR
 	return &CreateTicket{tickets: tickets, customers: customers, current: current, queue: queue}
 }
 
+//申請者がチケットを起票し、保存したあと待ち順へ載せる
 func (c *CreateTicket) Execute(ctx context.Context, authorization, title, description, category string, severity int) (domain.Ticket, error) {
 	actor, err := c.current.Execute(ctx, authorization)
 	if err != nil {

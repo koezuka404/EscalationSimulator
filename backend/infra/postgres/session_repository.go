@@ -54,6 +54,7 @@ func (r *SessionRepository) RevokeByHash(ctx context.Context, tokenHash string) 
 	return r.db.WithContext(ctx).Model(&sessionRow{}).Where("token_hash = ?", tokenHash).Update("revoked", true).Error
 }
 
+//再ログイン用の印を新しい印に替える古い印の再使用は系統ごと無効にする
 func (r *SessionRepository) Rotate(ctx context.Context, oldHash string, next domain.Session, now time.Time) (string, bool, error) {
 	var userID string
 	var reused bool

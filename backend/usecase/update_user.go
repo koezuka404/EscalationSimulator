@@ -6,7 +6,6 @@ import (
 	"escalator/domain"
 )
 
-// LinkApplicant は管理者だけが、申請者を顧客に結びつける。
 type LinkApplicant struct {
 	users     domain.UserRepository
 	customers domain.CustomerRepository
@@ -17,6 +16,7 @@ func NewLinkApplicant(users domain.UserRepository, customers domain.CustomerRepo
 	return &LinkApplicant{users: users, customers: customers, current: current}
 }
 
+//管理者だけが、申請者を顧客に結びつける
 func (l *LinkApplicant) Execute(ctx context.Context, authorization, userID, customerID string) (domain.User, error) {
 	actor, err := l.current.Execute(ctx, authorization)
 	if err != nil {

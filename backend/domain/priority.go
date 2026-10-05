@@ -12,9 +12,7 @@ var (
 	ErrInvalidPlanScore = errors.New("プランの点数は1、2、3のどれかにしてください")
 )
 
-// PriorityScore は待ち順の点数を返す。保存先も順番メモリも知らない。
-// 待ち時間の加点だけ 99 分で頭打ちにする。期限超過は、頭打ちする前の経過分で判定する。
-// すでに担当が付いている件は超過にしない。
+//緊急度、プラン、超過、待ち時間から点数を返す
 func PriorityScore(severity, planScore int, createdAt, now time.Time, slaMinutes int, assigned bool) (int, error) {
 	if severity < 1 || severity > 4 {
 		return 0, ErrInvalidSeverity
@@ -37,9 +35,7 @@ func PriorityScore(severity, planScore int, createdAt, now time.Time, slaMinutes
 	return severity*1_000_000 + overdue*10_000 + planScore*100 + waited, nil
 }
 
-// SameScoreFirst は点数が同じとき、a を b より先にするかを返す。
-// 作った時刻が早い方を先にする。時刻も同じなら ID が小さい方を先にする。
-// 保存先も順番メモリも知らない。
+//点数が同じとき、作った時刻が早い方を先にする
 func SameScoreFirst(createdA time.Time, idA string, createdB time.Time, idB string) bool {
 	if createdA.Before(createdB) {
 		return true
@@ -48,6 +44,26 @@ func SameScoreFirst(createdA time.Time, idA string, createdB time.Time, idB stri
 		return false
 	}
 	return idA < idB
+}
+
+//点数が高い方を先にし、同じ点数は作った時刻が早い方を先にする
+func WaitingFirst(scoreA int, createdA time.Time, idA string, scoreB int, createdB time.Time, idB string) bool {
+	if scoreA != scoreB {
+		return scoreA > scoreB
+	}
+	return SameScoreFirst(createdA, idA, createdB, idB)
+}
+
+//待ち時間と、約束時間までの残り、超過を返す
+func SLAProgress(createdAt, now time.Time, slaMinutes int, assigned bool) (waited, remaining, overdueMinutes int, overdue bool) {
+	waited = elapsedMinutes(createdAt, now)
+	if slaMinutes < 1 {
+		return waited, 0, 0, false
+	}
+	if !assigned && waited >= slaMinutes {
+		return waited, 0, waited - slaMinutes, true
+	}
+	return waited, slaMinutes - waited, 0, false
 }
 
 func elapsedMinutes(createdAt, now time.Time) int {

@@ -12,7 +12,6 @@ import (
 	"escalator/usecase"
 )
 
-// AuthAPI は会員登録とログインを HTTP で受ける入口。
 type AuthAPI struct {
 	signUp            *usecase.SignUp
 	logIn             *usecase.LogIn
@@ -37,6 +36,7 @@ func NewAuthAPI(signUp *usecase.SignUp, logIn *usecase.LogIn, logOut *usecase.Lo
 	}
 }
 
+//会員登録を受ける
 func (a *AuthAPI) Register(c echo.Context) error {
 	var body registerJSON
 	if err := c.Bind(&body); err != nil {
@@ -49,6 +49,7 @@ func (a *AuthAPI) Register(c echo.Context) error {
 	return c.JSON(http.StatusCreated, toUserJSON(user))
 }
 
+//ログインを受ける
 func (a *AuthAPI) Login(c echo.Context) error {
 	var body loginJSON
 	if err := c.Bind(&body); err != nil {
@@ -67,6 +68,7 @@ func (a *AuthAPI) Login(c echo.Context) error {
 	})
 }
 
+//ログアウトを受ける
 func (a *AuthAPI) Logout(c echo.Context) error {
 	if err := middleware.Allow(c.Request(), a.csrfCookieName); err != nil {
 		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
@@ -83,6 +85,7 @@ func (a *AuthAPI) Logout(c echo.Context) error {
 	return c.JSON(http.StatusOK, messageJSON{Message: "ログアウトしました"})
 }
 
+//ログイン用トークンの再発行を受ける
 func (a *AuthAPI) Refresh(c echo.Context) error {
 	if err := middleware.Allow(c.Request(), a.csrfCookieName); err != nil {
 		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})

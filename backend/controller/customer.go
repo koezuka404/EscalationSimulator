@@ -10,7 +10,6 @@ import (
 	"escalator/usecase"
 )
 
-// CustomerAPI は顧客の一覧と更新を HTTP で受ける入口。
 type CustomerAPI struct {
 	customers *usecase.Customers
 }
@@ -19,6 +18,7 @@ func NewCustomerAPI(customers *usecase.Customers) *CustomerAPI {
 	return &CustomerAPI{customers: customers}
 }
 
+//顧客の一覧を返す
 func (a *CustomerAPI) List(c echo.Context) error {
 	customers, err := a.customers.List(c.Request().Context())
 	if err != nil {
@@ -31,6 +31,7 @@ func (a *CustomerAPI) List(c echo.Context) error {
 	return c.JSON(http.StatusOK, body)
 }
 
+//顧客の名前、プラン、目標時間を更新する
 func (a *CustomerAPI) Update(c echo.Context) error {
 	var body updateCustomerJSON
 	if err := c.Bind(&body); err != nil {
