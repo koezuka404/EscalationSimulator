@@ -4,9 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"os/signal"
 	"time"
@@ -16,6 +14,7 @@ import (
 	"escalator/config"
 	"escalator/controller"
 	"escalator/infra/postgres"
+	"escalator/redis"
 	"escalator/router"
 	"escalator/usecase"
 )
@@ -60,10 +59,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := dial(cfg.RedisURL); err != nil {
+	order, err := redis.Open(cfg.RedisURL)
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "待ち順の保存先に接続できませんでした: %v\n", err)
 		os.Exit(1)
 	}
+	defer order.Close()
 
 	e := echo.New()
 	e.HideBanner = true
@@ -75,7 +76,7 @@ func main() {
 	current := usecase.NewCurrentUser(users, []byte(cfg.JWTSecret), cfg.JWTIssuer, cfg.JWTAudience)
 	router.Me(e, controller.NewMeAPI(current))
 	router.Users(e, controller.NewUserAPI(usecase.NewLinkApplicant(users, customers, current)))
-	router.Tickets(e, controller.NewTicketAPI(usecase.NewCreateTicket(postgres.NewTicketRepository(db), customers, current)))
+	router.Tickets(e, controller.NewTicketAPI(usecase.NewCreateTicket(postgres.NewTicketRepository(db), customers, current, order)))
 	router.Auth(e, controller.NewAuthAPI(
 		usecase.NewSignUp(users, cfg.BcryptCost),
 		usecase.NewLogIn(users, sessions, []byte(cfg.JWTSecret), cfg.JWTIssuer, cfg.JWTAudience, cfg.AccessTokenTTL, cfg.RefreshTokenTTL, cfg.LoginMaxFailures, cfg.LoginLock),
@@ -105,28 +106,4 @@ func main() {
 		fmt.Fprintf(os.Stderr, "サーバーを停止できませんでした: %v\n", err)
 		os.Exit(1)
 	}
-}
-
-func dial(rawURL string) error {
-	parsed, err := url.Parse(rawURL)
-	if err != nil {
-		return err
-	}
-	host := parsed.Host
-	if host == "" {
-		return fmt.Errorf("接続先のアドレスが空です")
-	}
-	if _, _, err := net.SplitHostPort(host); err != nil {
-		switch parsed.Scheme {
-		case "redis", "rediss":
-			host = net.JoinHostPort(host, "6379")
-		default:
-			host = net.JoinHostPort(host, "5432")
-		}
-	}
-	conn, err := net.DialTimeout("tcp", host, 3*time.Second)
-	if err != nil {
-		return err
-	}
-	return conn.Close()
 }
