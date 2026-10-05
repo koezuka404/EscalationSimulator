@@ -15,6 +15,10 @@ func Users(e *echo.Echo, api *controller.UserAPI) {
 	e.PATCH("/api/users/:id", api.LinkCustomer)
 }
 
+func Tickets(e *echo.Echo, api *controller.TicketAPI) {
+	e.POST("/api/tickets", api.Create)
+}
+
 func Me(e *echo.Echo, api *controller.MeAPI) {
 	e.GET("/api/me", api.Show)
 }

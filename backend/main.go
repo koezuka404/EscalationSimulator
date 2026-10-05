@@ -51,6 +51,10 @@ func main() {
 		fmt.Fprintf(os.Stderr, "ログイン用のテーブルを作成できませんでした: %v\n", err)
 		os.Exit(1)
 	}
+	if err := postgres.MigrateTickets(db); err != nil {
+		fmt.Fprintf(os.Stderr, "チケット用のテーブルを作成できませんでした: %v\n", err)
+		os.Exit(1)
+	}
 	if err := postgres.SeedCustomersIfEmpty(context.Background(), postgres.NewCustomerRepository(db)); err != nil {
 		fmt.Fprintf(os.Stderr, "サンプルの顧客を登録できませんでした: %v\n", err)
 		os.Exit(1)
@@ -66,10 +70,12 @@ func main() {
 	e.HidePort = true
 	users := postgres.NewUserRepository(db)
 	sessions := postgres.NewSessionRepository(db)
-	router.Customers(e, controller.NewCustomerAPI(usecase.NewCustomers(postgres.NewCustomerRepository(db))))
+	customers := postgres.NewCustomerRepository(db)
+	router.Customers(e, controller.NewCustomerAPI(usecase.NewCustomers(customers)))
 	current := usecase.NewCurrentUser(users, []byte(cfg.JWTSecret), cfg.JWTIssuer, cfg.JWTAudience)
 	router.Me(e, controller.NewMeAPI(current))
-	router.Users(e, controller.NewUserAPI(usecase.NewLinkApplicant(users, postgres.NewCustomerRepository(db), current)))
+	router.Users(e, controller.NewUserAPI(usecase.NewLinkApplicant(users, customers, current)))
+	router.Tickets(e, controller.NewTicketAPI(usecase.NewCreateTicket(postgres.NewTicketRepository(db), customers, current)))
 	router.Auth(e, controller.NewAuthAPI(
 		usecase.NewSignUp(users, cfg.BcryptCost),
 		usecase.NewLogIn(users, sessions, []byte(cfg.JWTSecret), cfg.JWTIssuer, cfg.JWTAudience, cfg.AccessTokenTTL, cfg.RefreshTokenTTL, cfg.LoginMaxFailures, cfg.LoginLock),
