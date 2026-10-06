@@ -70,6 +70,7 @@ func main() {
 	router.Tickets(e, controller.NewTicketAPI(
 		usecase.NewCreateTicket(tickets, customers, current, order),
 		usecase.NewCloseTicket(tickets, order, current),
+		usecase.NewChangeSeverity(tickets, customers, current, order),
 	))
 	router.Queue(e, controller.NewQueueAPI(
 		usecase.NewListWaitingTickets(tickets, customers, current),

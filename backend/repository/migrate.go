@@ -19,6 +19,9 @@ func Migrate(db *gorm.DB) error {
 	if err := MigrateTickets(db); err != nil {
 		return fmt.Errorf("チケット用のテーブルを作成できませんでした: %w", err)
 	}
+	if err := MigrateSeverityHistories(db); err != nil {
+		return fmt.Errorf("緊急度の履歴用のテーブルを作成できませんでした: %w", err)
+	}
 	if err := MigrateAgentStatuses(db); err != nil {
 		return fmt.Errorf("担当者の稼働用のテーブルを作成できませんでした: %w", err)
 	}

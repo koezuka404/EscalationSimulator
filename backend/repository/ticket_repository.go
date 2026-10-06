@@ -44,6 +44,22 @@ func MigrateTickets(db *gorm.DB) error {
 	return db.AutoMigrate(&ticketRow{})
 }
 
+type severityHistoryRow struct {
+	ID           string `gorm:"primaryKey"`
+	TicketID     string `gorm:"index"`
+	FromSeverity int
+	ToSeverity   int
+	Reason       string
+	ChangedBy    string `gorm:"index"`
+	CreatedAt    time.Time
+}
+
+func (severityHistoryRow) TableName() string { return "ticket_severity_histories" }
+
+func MigrateSeverityHistories(db *gorm.DB) error {
+	return db.AutoMigrate(&severityHistoryRow{})
+}
+
 //チケットを保存する
 func (r *ticketRepository) Save(ctx context.Context, ticket entity.Ticket) (entity.Ticket, error) {
 	if ticket.ID == "" {
@@ -133,6 +149,64 @@ func setAgentAvailable(tx *gorm.DB, agentID string) error {
 		return nil
 	}
 	return tx.Create(&agentStatusRow{UserID: agentID, Status: string(entity.AgentAvailable)}).Error
+}
+
+//緊急度と点数を保存し、変更の履歴を残す
+func (r *ticketRepository) UpdateSeverity(ctx context.Context, id string, severity, planScore, slaMinutes int, reason, changedBy string, now time.Time) (entity.Ticket, error) {
+	var updated entity.Ticket
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var row ticketRow
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&row, "id = ?", id).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return entity.ErrTicketNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if row.Status == string(entity.TicketClosed) {
+			return entity.ErrSeverityClosed
+		}
+		if severity == row.Severity {
+			return entity.ErrSeveritySame
+		}
+		assigned := row.Status == string(entity.TicketInProgress)
+		score, err := entity.PriorityScore(severity, planScore, row.CreatedAt, now, slaMinutes, assigned)
+		if err != nil {
+			return err
+		}
+		result := tx.Model(&ticketRow{}).Where("id = ? AND status <> ?", id, string(entity.TicketClosed)).Updates(map[string]any{
+			"severity":       severity,
+			"priority_score": score,
+			"updated_at":     now,
+		})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return entity.ErrSeverityClosed
+		}
+		history := severityHistoryRow{
+			ID:           uuid.NewString(),
+			TicketID:     id,
+			FromSeverity: row.Severity,
+			ToSeverity:   severity,
+			Reason:       reason,
+			ChangedBy:    changedBy,
+			CreatedAt:    now,
+		}
+		if err := tx.Create(&history).Error; err != nil {
+			return err
+		}
+		if err := tx.First(&row, "id = ?", id).Error; err != nil {
+			return err
+		}
+		updated = toTicket(row)
+		return nil
+	})
+	if err != nil {
+		return entity.Ticket{}, err
+	}
+	return updated, nil
 }
 
 //対応待ちのチケットを返す詳細の本文は読まない

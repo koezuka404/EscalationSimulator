@@ -34,6 +34,7 @@ type TicketRepository interface {
 	FindByID(ctx context.Context, id string) (entity.Ticket, error)
 	ListOpen(ctx context.Context) ([]entity.Ticket, error)
 	Close(ctx context.Context, id, comment string, closedAt time.Time) (entity.Ticket, error)
+	UpdateSeverity(ctx context.Context, id string, severity, planScore, slaMinutes int, reason, changedBy string, now time.Time) (entity.Ticket, error)
 }
 
 type TicketQueue interface {

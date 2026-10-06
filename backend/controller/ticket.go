@@ -12,12 +12,13 @@ import (
 )
 
 type TicketAPI struct {
-	create *usecase.CreateTicket
-	close  *usecase.CloseTicket
+	create   *usecase.CreateTicket
+	close    *usecase.CloseTicket
+	severity *usecase.ChangeSeverity
 }
 
-func NewTicketAPI(create *usecase.CreateTicket, close *usecase.CloseTicket) *TicketAPI {
-	return &TicketAPI{create: create, close: close}
+func NewTicketAPI(create *usecase.CreateTicket, close *usecase.CloseTicket, severity *usecase.ChangeSeverity) *TicketAPI {
+	return &TicketAPI{create: create, close: close, severity: severity}
 }
 
 //チケットの起票を受ける
@@ -51,6 +52,24 @@ func (a *TicketAPI) Close(c echo.Context) error {
 		return writeCloseTicketError(c, err)
 	}
 	return c.JSON(http.StatusOK, toTicketJSON(ticket))
+}
+
+//緊急度の変更を受ける
+func (a *TicketAPI) Escalate(c echo.Context) error {
+	var body changeSeverityJSON
+	if err := c.Bind(&body); err != nil {
+		return c.JSON(http.StatusBadRequest, messageJSON{Message: "送られた内容を読み取れませんでした。緊急度と理由を入力してください"})
+	}
+	ticket, err := a.severity.Execute(c.Request().Context(), c.Request().Header.Get("Authorization"), c.Param("id"), body.Reason, body.Severity)
+	if err != nil {
+		return writeChangeSeverityError(c, err)
+	}
+	return c.JSON(http.StatusOK, toTicketJSON(ticket))
+}
+
+type changeSeverityJSON struct {
+	Severity int    `json:"severity"`
+	Reason   string `json:"reason"`
 }
 
 type closeTicketJSON struct {
@@ -141,5 +160,27 @@ func writeCloseTicketError(c echo.Context, err error) error {
 		return c.JSON(http.StatusBadRequest, messageJSON{Message: err.Error()})
 	default:
 		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "チケットを完了できませんでした。しばらくしてから、もう一度試してください"})
+	}
+}
+
+func writeChangeSeverityError(c echo.Context, err error) error {
+	switch {
+	case errors.Is(err, entity.ErrUnauthenticated):
+		return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})
+	case errors.Is(err, entity.ErrSeverityRole),
+		errors.Is(err, entity.ErrSeverityLower),
+		errors.Is(err, entity.ErrSeverityRaise):
+		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
+	case errors.Is(err, entity.ErrTicketNotFound),
+		errors.Is(err, entity.ErrCustomerNotFound):
+		return c.JSON(http.StatusNotFound, messageJSON{Message: err.Error()})
+	case errors.Is(err, entity.ErrSeverityClosed):
+		return c.JSON(http.StatusConflict, messageJSON{Message: err.Error()})
+	case errors.Is(err, entity.ErrInvalidSeverity),
+		errors.Is(err, entity.ErrInvalidSeverityReason),
+		errors.Is(err, entity.ErrSeveritySame):
+		return c.JSON(http.StatusBadRequest, messageJSON{Message: err.Error()})
+	default:
+		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "緊急度を変更できませんでした。しばらくしてから、もう一度試してください"})
 	}
 }

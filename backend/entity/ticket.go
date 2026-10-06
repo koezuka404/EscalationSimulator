@@ -26,21 +26,27 @@ const (
 )
 
 var (
-	ErrInvalidTitle        = errors.New("件名は1文字以上、200文字以内で入力してください")
-	ErrInvalidDescription  = errors.New("詳細は1文字以上、5000文字以内で入力してください")
-	ErrInvalidCategory     = errors.New("種類は障害、不具合、質問、要望、その他のどれかを選んでください")
-	ErrTicketApplicant     = errors.New("チケットを起票できるのは申請者だけです")
-	ErrCustomerRequired    = errors.New("所属顧客が設定されていません")
-	ErrTicketNotFound      = errors.New("チケットが見つかりませんでした")
-	ErrQueueForbidden      = errors.New("待ち順を見られるのは担当者と管理者だけです")
-	ErrClaimAgent          = errors.New("次を引き取れるのは担当者だけです")
-	ErrNotWaiting          = errors.New("待機中のときだけ引き取れます")
-	ErrAgentBusy           = errors.New("対応中のチケットがあります")
-	ErrQueueEmpty          = errors.New("待ちチケットがありません")
-	ErrQueueUnavailable    = errors.New("待ち順を一時的に利用できません")
-	ErrNotInProgress       = errors.New("対応中のチケットではありません")
-	ErrCloseForbidden      = errors.New("このチケットを完了できるのは、担当者か管理者だけです")
-	ErrInvalidCloseComment = errors.New("終了コメントは1文字以上、2000文字以内で入力してください")
+	ErrInvalidTitle          = errors.New("件名は1文字以上、200文字以内で入力してください")
+	ErrInvalidDescription    = errors.New("詳細は1文字以上、5000文字以内で入力してください")
+	ErrInvalidCategory       = errors.New("種類は障害、不具合、質問、要望、その他のどれかを選んでください")
+	ErrTicketApplicant       = errors.New("チケットを起票できるのは申請者だけです")
+	ErrCustomerRequired      = errors.New("所属顧客が設定されていません")
+	ErrTicketNotFound        = errors.New("チケットが見つかりませんでした")
+	ErrQueueForbidden        = errors.New("待ち順を見られるのは担当者と管理者だけです")
+	ErrClaimAgent            = errors.New("次を引き取れるのは担当者だけです")
+	ErrNotWaiting            = errors.New("待機中のときだけ引き取れます")
+	ErrAgentBusy             = errors.New("対応中のチケットがあります")
+	ErrQueueEmpty            = errors.New("待ちチケットがありません")
+	ErrQueueUnavailable      = errors.New("待ち順を一時的に利用できません")
+	ErrNotInProgress         = errors.New("対応中のチケットではありません")
+	ErrCloseForbidden        = errors.New("このチケットを完了できるのは、担当者か管理者だけです")
+	ErrInvalidCloseComment   = errors.New("終了コメントは1文字以上、2000文字以内で入力してください")
+	ErrInvalidSeverityReason = errors.New("理由は1文字以上、500文字以内で入力してください")
+	ErrSeveritySame          = errors.New("緊急度は今と違う値を選んでください")
+	ErrSeverityClosed        = errors.New("完了したチケットの緊急度は変えられません")
+	ErrSeverityRole          = errors.New("緊急度を変えられるのは担当者と管理者だけです")
+	ErrSeverityLower         = errors.New("緊急度を下げられるのは管理者だけです")
+	ErrSeverityRaise         = errors.New("緊急度を上げられるのは、自分の対応中のチケットだけです")
 )
 
 type Ticket struct {
@@ -89,6 +95,38 @@ func NewTicket(customerID, createdBy, title, description string, severity int, c
 		Status:      TicketOpen,
 		CreatedAt:   createdAt,
 	}, nil
+}
+
+//緊急度を変える理由の文字数を確かめる
+func SeverityReason(reason string) (string, error) {
+	reason = strings.TrimSpace(reason)
+	if utf8.RuneCountInString(reason) < 1 || utf8.RuneCountInString(reason) > 500 {
+		return "", ErrInvalidSeverityReason
+	}
+	return reason, nil
+}
+
+//緊急度を変えてよいかを確かめる
+func CanChangeSeverity(role Role, actorID string, ticket Ticket, next int) error {
+	if role != RoleAgent && role != RoleAdmin {
+		return ErrSeverityRole
+	}
+	if next < 1 || next > 4 {
+		return ErrInvalidSeverity
+	}
+	if ticket.Status == TicketClosed {
+		return ErrSeverityClosed
+	}
+	if next == ticket.Severity {
+		return ErrSeveritySame
+	}
+	if next < ticket.Severity && role != RoleAdmin {
+		return ErrSeverityLower
+	}
+	if role == RoleAgent && (ticket.Status != TicketInProgress || ticket.AssigneeID != actorID) {
+		return ErrSeverityRaise
+	}
+	return nil
 }
 
 //終了コメントの文字数を確かめる
