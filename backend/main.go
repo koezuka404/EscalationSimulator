@@ -14,6 +14,7 @@ import (
 	"escalator/config"
 	"escalator/controller"
 	"escalator/db"
+	"escalator/job"
 	"escalator/redis"
 	"escalator/repository"
 	"escalator/router"
@@ -76,6 +77,14 @@ func main() {
 		usecase.NewListWaitingTickets(tickets, customers, current),
 		usecase.NewClaimNextTicket(repository.NewClaimRepository(conn), order, current),
 	))
+	jobCtx, stopJob := context.WithCancel(context.Background())
+	defer stopJob()
+	go job.NewRecalcPriority(
+		usecase.NewRecalcOpenScores(tickets, customers, order),
+		order,
+		cfg.PriorityRecalc,
+	).Run(jobCtx)
+
 	router.Auth(e, controller.NewAuthAPI(
 		usecase.NewSignUp(users, cfg.BcryptCost),
 		usecase.NewLogIn(users, sessions, []byte(cfg.JWTSecret), cfg.JWTIssuer, cfg.JWTAudience, cfg.AccessTokenTTL, cfg.RefreshTokenTTL, cfg.LoginMaxFailures, cfg.LoginLock),
@@ -98,6 +107,7 @@ func main() {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt)
 	<-stop
+	stopJob()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

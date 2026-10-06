@@ -5,10 +5,18 @@ import (
 	"math"
 	"time"
 
+	"github.com/google/uuid"
 	goredis "github.com/redis/go-redis/v9"
 )
 
 const ticketQueueKey = "queue:tickets"
+
+const unlockScript = `
+if redis.call("get", KEYS[1]) == ARGV[1] then
+	return redis.call("del", KEYS[1])
+else
+	return 0
+end`
 
 type TicketOrder struct {
 	client *goredis.Client
@@ -64,4 +72,22 @@ func (o *TicketOrder) PopMax(ctx context.Context) (string, int, bool, error) {
 //待ち順からチケットを外す
 func (o *TicketOrder) Remove(ctx context.Context, ticketID string) error {
 	return o.client.ZRem(ctx, ticketQueueKey, ticketID).Err()
+}
+
+//一定時間だけロックを取る取れなければ何もしない
+func (o *TicketOrder) TryLock(ctx context.Context, key string, ttl time.Duration) (string, bool, error) {
+	token := uuid.NewString()
+	ok, err := o.client.SetNX(ctx, key, token, ttl).Result()
+	if err != nil {
+		return "", false, err
+	}
+	if !ok {
+		return "", false, nil
+	}
+	return token, true, nil
+}
+
+//自分のロックだけ外す
+func (o *TicketOrder) Unlock(ctx context.Context, key, token string) error {
+	return o.client.Eval(ctx, unlockScript, []string{key}, token).Err()
 }

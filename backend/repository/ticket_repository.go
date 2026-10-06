@@ -209,6 +209,20 @@ func (r *ticketRepository) UpdateSeverity(ctx context.Context, id string, severi
 	return updated, nil
 }
 
+//対応待ちの点数だけを保存する対応中や完了は変えない
+func (r *ticketRepository) UpdateOpenScore(ctx context.Context, id string, score int, now time.Time) (bool, error) {
+	result := r.db.WithContext(ctx).Model(&ticketRow{}).
+		Where("id = ? AND status = ?", id, string(entity.TicketOpen)).
+		Updates(map[string]any{
+			"priority_score": score,
+			"updated_at":     now,
+		})
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.RowsAffected > 0, nil
+}
+
 //対応待ちのチケットを返す詳細の本文は読まない
 func (r *ticketRepository) ListOpen(ctx context.Context) ([]entity.Ticket, error) {
 	var rows []ticketRow
