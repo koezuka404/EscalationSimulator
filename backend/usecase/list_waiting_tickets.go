@@ -5,7 +5,8 @@ import (
 	"sort"
 	"time"
 
-	"escalator/domain"
+	"escalator/entity"
+	"escalator/repository"
 )
 
 type WaitingTicket struct {
@@ -13,7 +14,7 @@ type WaitingTicket struct {
 	ID               string
 	Title            string
 	Severity         int
-	Plan             domain.Plan
+	Plan             entity.Plan
 	WaitMinutes      int
 	PriorityScore    int
 	RemainingMinutes int
@@ -23,12 +24,12 @@ type WaitingTicket struct {
 }
 
 type ListWaitingTickets struct {
-	tickets   domain.TicketRepository
-	customers domain.CustomerRepository
+	tickets   repository.TicketRepository
+	customers repository.CustomerRepository
 	current   *CurrentUser
 }
 
-func NewListWaitingTickets(tickets domain.TicketRepository, customers domain.CustomerRepository, current *CurrentUser) *ListWaitingTickets {
+func NewListWaitingTickets(tickets repository.TicketRepository, customers repository.CustomerRepository, current *CurrentUser) *ListWaitingTickets {
 	return &ListWaitingTickets{tickets: tickets, customers: customers, current: current}
 }
 
@@ -38,8 +39,8 @@ func (l *ListWaitingTickets) Execute(ctx context.Context, authorization string) 
 	if err != nil {
 		return nil, err
 	}
-	if actor.Role != domain.RoleAgent && actor.Role != domain.RoleAdmin {
-		return nil, domain.ErrQueueForbidden
+	if actor.Role != entity.RoleAgent && actor.Role != entity.RoleAdmin {
+		return nil, entity.ErrQueueForbidden
 	}
 	open, err := l.tickets.ListOpen(ctx)
 	if err != nil {
@@ -49,18 +50,18 @@ func (l *ListWaitingTickets) Execute(ctx context.Context, authorization string) 
 	if err != nil {
 		return nil, err
 	}
-	byID := make(map[string]domain.Customer, len(customers))
+	byID := make(map[string]entity.Customer, len(customers))
 	for _, customer := range customers {
 		byID[customer.ID] = customer
 	}
 	sort.Slice(open, func(i, j int) bool {
-		return domain.WaitingFirst(open[i].PriorityScore, open[i].CreatedAt, open[i].ID, open[j].PriorityScore, open[j].CreatedAt, open[j].ID)
+		return entity.WaitingFirst(open[i].PriorityScore, open[i].CreatedAt, open[i].ID, open[j].PriorityScore, open[j].CreatedAt, open[j].ID)
 	})
 	now := time.Now()
 	waiting := make([]WaitingTicket, 0, len(open))
 	for i, ticket := range open {
 		customer := byID[ticket.CustomerID]
-		waited, remaining, overdueMinutes, overdue := domain.SLAProgress(ticket.CreatedAt, now, customer.SLAMinutes, ticket.AssigneeID != "")
+		waited, remaining, overdueMinutes, overdue := entity.SLAProgress(ticket.CreatedAt, now, customer.SLAMinutes, ticket.AssigneeID != "")
 		waiting = append(waiting, WaitingTicket{
 			Rank:             i + 1,
 			ID:               ticket.ID,

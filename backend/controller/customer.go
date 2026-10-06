@@ -6,7 +6,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	"escalator/domain"
+	"escalator/entity"
 	"escalator/usecase"
 )
 
@@ -41,7 +41,7 @@ func (a *CustomerAPI) Update(c echo.Context) error {
 		c.Request().Context(),
 		c.Param("id"),
 		body.Name,
-		domain.Plan(body.Plan),
+		entity.Plan(body.Plan),
 		body.SLAMinutes,
 	)
 	if err != nil {
@@ -67,7 +67,7 @@ type messageJSON struct {
 	Message string `json:"message"`
 }
 
-func toCustomerJSON(customer domain.Customer) customerJSON {
+func toCustomerJSON(customer entity.Customer) customerJSON {
 	return customerJSON{
 		ID:         customer.ID,
 		Name:       customer.Name,
@@ -78,11 +78,11 @@ func toCustomerJSON(customer domain.Customer) customerJSON {
 
 func writeCustomerError(c echo.Context, err error) error {
 	switch {
-	case errors.Is(err, domain.ErrCustomerNotFound):
+	case errors.Is(err, entity.ErrCustomerNotFound):
 		return c.JSON(http.StatusNotFound, messageJSON{Message: err.Error()})
-	case errors.Is(err, domain.ErrInvalidCustomerName),
-		errors.Is(err, domain.ErrInvalidPlan),
-		errors.Is(err, domain.ErrInvalidSLAMinutes):
+	case errors.Is(err, entity.ErrInvalidCustomerName),
+		errors.Is(err, entity.ErrInvalidPlan),
+		errors.Is(err, entity.ErrInvalidSLAMinutes):
 		return c.JSON(http.StatusBadRequest, messageJSON{Message: err.Error()})
 	default:
 		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "顧客を保存できませんでした。しばらくしてから、もう一度試してください"})

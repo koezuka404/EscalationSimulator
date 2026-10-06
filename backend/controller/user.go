@@ -6,7 +6,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	"escalator/domain"
+	"escalator/entity"
 	"escalator/usecase"
 )
 
@@ -37,13 +37,13 @@ type linkCustomerJSON struct {
 
 func writeLinkError(c echo.Context, err error) error {
 	switch {
-	case errors.Is(err, domain.ErrUnauthenticated):
+	case errors.Is(err, entity.ErrUnauthenticated):
 		return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})
-	case errors.Is(err, domain.ErrForbidden), errors.Is(err, domain.ErrNotApplicant):
+	case errors.Is(err, entity.ErrForbidden), errors.Is(err, entity.ErrNotApplicant):
 		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
-	case errors.Is(err, domain.ErrUserNotFound), errors.Is(err, domain.ErrCustomerNotFound):
+	case errors.Is(err, entity.ErrUserNotFound), errors.Is(err, entity.ErrCustomerNotFound):
 		return c.JSON(http.StatusNotFound, messageJSON{Message: err.Error()})
-	case errors.Is(err, domain.ErrCustomerLink):
+	case errors.Is(err, entity.ErrCustomerLink):
 		return c.JSON(http.StatusBadRequest, messageJSON{Message: err.Error()})
 	default:
 		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "申請者を顧客に結びつけられませんでした。しばらくしてから、もう一度試してください"})

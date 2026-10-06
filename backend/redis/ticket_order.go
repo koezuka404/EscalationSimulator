@@ -60,3 +60,8 @@ func (o *TicketOrder) PopMax(ctx context.Context) (string, int, bool, error) {
 	}
 	return id, int(math.Round(values[0].Score)), true, nil
 }
+
+//待ち順からチケットを外す
+func (o *TicketOrder) Remove(ctx context.Context, ticketID string) error {
+	return o.client.ZRem(ctx, ticketQueueKey, ticketID).Err()
+}

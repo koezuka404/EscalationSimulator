@@ -6,7 +6,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	"escalator/domain"
+	"escalator/entity"
 	"escalator/usecase"
 )
 
@@ -73,9 +73,9 @@ func toWaitingTicketJSON(ticket usecase.WaitingTicket) waitingTicketJSON {
 
 func writeQueueError(c echo.Context, err error) error {
 	switch {
-	case errors.Is(err, domain.ErrUnauthenticated):
+	case errors.Is(err, entity.ErrUnauthenticated):
 		return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})
-	case errors.Is(err, domain.ErrQueueForbidden):
+	case errors.Is(err, entity.ErrQueueForbidden):
 		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
 	default:
 		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "待ち順を表示できませんでした。しばらくしてから、もう一度試してください"})
@@ -84,15 +84,15 @@ func writeQueueError(c echo.Context, err error) error {
 
 func writeClaimError(c echo.Context, err error) error {
 	switch {
-	case errors.Is(err, domain.ErrUnauthenticated):
+	case errors.Is(err, entity.ErrUnauthenticated):
 		return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})
-	case errors.Is(err, domain.ErrClaimAgent):
+	case errors.Is(err, entity.ErrClaimAgent):
 		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
-	case errors.Is(err, domain.ErrNotWaiting),
-		errors.Is(err, domain.ErrAgentBusy),
-		errors.Is(err, domain.ErrQueueEmpty):
+	case errors.Is(err, entity.ErrNotWaiting),
+		errors.Is(err, entity.ErrAgentBusy),
+		errors.Is(err, entity.ErrQueueEmpty):
 		return c.JSON(http.StatusConflict, messageJSON{Message: err.Error()})
-	case errors.Is(err, domain.ErrQueueUnavailable):
+	case errors.Is(err, entity.ErrQueueUnavailable):
 		return c.JSON(http.StatusServiceUnavailable, messageJSON{Message: err.Error()})
 	default:
 		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "チケットを引き取れませんでした。しばらくしてから、もう一度試してください"})

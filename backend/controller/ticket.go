@@ -7,16 +7,17 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	"escalator/domain"
+	"escalator/entity"
 	"escalator/usecase"
 )
 
 type TicketAPI struct {
 	create *usecase.CreateTicket
+	close  *usecase.CloseTicket
 }
 
-func NewTicketAPI(create *usecase.CreateTicket) *TicketAPI {
-	return &TicketAPI{create: create}
+func NewTicketAPI(create *usecase.CreateTicket, close *usecase.CloseTicket) *TicketAPI {
+	return &TicketAPI{create: create, close: close}
 }
 
 //チケットの起票を受ける
@@ -39,6 +40,23 @@ func (a *TicketAPI) Create(c echo.Context) error {
 	return c.JSON(http.StatusCreated, toTicketJSON(ticket))
 }
 
+//チケットの完了を受ける
+func (a *TicketAPI) Close(c echo.Context) error {
+	var body closeTicketJSON
+	if err := c.Bind(&body); err != nil {
+		return c.JSON(http.StatusBadRequest, messageJSON{Message: "送られた内容を読み取れませんでした。終了コメントを入力してください"})
+	}
+	ticket, err := a.close.Execute(c.Request().Context(), c.Request().Header.Get("Authorization"), c.Param("id"), body.Comment)
+	if err != nil {
+		return writeCloseTicketError(c, err)
+	}
+	return c.JSON(http.StatusOK, toTicketJSON(ticket))
+}
+
+type closeTicketJSON struct {
+	Comment string `json:"comment"`
+}
+
 type createTicketJSON struct {
 	Title       string `json:"title"`
 	Description string `json:"description"`
@@ -59,9 +77,11 @@ type ticketJSON struct {
 	PriorityScore int        `json:"priority_score"`
 	CreatedAt     time.Time  `json:"created_at"`
 	ClaimedAt     *time.Time `json:"claimed_at,omitempty"`
+	ClosedAt      *time.Time `json:"closed_at,omitempty"`
+	CloseComment  string     `json:"close_comment,omitempty"`
 }
 
-func toTicketJSON(ticket domain.Ticket) ticketJSON {
+func toTicketJSON(ticket entity.Ticket) ticketJSON {
 	body := ticketJSON{
 		ID:            ticket.ID,
 		CustomerID:    ticket.CustomerID,
@@ -79,25 +99,47 @@ func toTicketJSON(ticket domain.Ticket) ticketJSON {
 		claimedAt := ticket.ClaimedAt
 		body.ClaimedAt = &claimedAt
 	}
+	if !ticket.ClosedAt.IsZero() {
+		closedAt := ticket.ClosedAt
+		body.ClosedAt = &closedAt
+	}
+	body.CloseComment = ticket.CloseComment
 	return body
 }
 
 func writeCreateTicketError(c echo.Context, err error) error {
 	switch {
-	case errors.Is(err, domain.ErrUnauthenticated):
+	case errors.Is(err, entity.ErrUnauthenticated):
 		return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})
-	case errors.Is(err, domain.ErrTicketApplicant):
+	case errors.Is(err, entity.ErrTicketApplicant):
 		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
-	case errors.Is(err, domain.ErrCustomerRequired):
+	case errors.Is(err, entity.ErrCustomerRequired):
 		return c.JSON(http.StatusConflict, messageJSON{Message: err.Error()})
-	case errors.Is(err, domain.ErrCustomerNotFound):
+	case errors.Is(err, entity.ErrCustomerNotFound):
 		return c.JSON(http.StatusNotFound, messageJSON{Message: err.Error()})
-	case errors.Is(err, domain.ErrInvalidTitle),
-		errors.Is(err, domain.ErrInvalidDescription),
-		errors.Is(err, domain.ErrInvalidCategory),
-		errors.Is(err, domain.ErrInvalidSeverity):
+	case errors.Is(err, entity.ErrInvalidTitle),
+		errors.Is(err, entity.ErrInvalidDescription),
+		errors.Is(err, entity.ErrInvalidCategory),
+		errors.Is(err, entity.ErrInvalidSeverity):
 		return c.JSON(http.StatusBadRequest, messageJSON{Message: err.Error()})
 	default:
 		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "チケットを起票できませんでした。しばらくしてから、もう一度試してください"})
+	}
+}
+
+func writeCloseTicketError(c echo.Context, err error) error {
+	switch {
+	case errors.Is(err, entity.ErrUnauthenticated):
+		return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})
+	case errors.Is(err, entity.ErrCloseForbidden):
+		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
+	case errors.Is(err, entity.ErrTicketNotFound):
+		return c.JSON(http.StatusNotFound, messageJSON{Message: err.Error()})
+	case errors.Is(err, entity.ErrNotInProgress):
+		return c.JSON(http.StatusConflict, messageJSON{Message: err.Error()})
+	case errors.Is(err, entity.ErrInvalidCloseComment):
+		return c.JSON(http.StatusBadRequest, messageJSON{Message: err.Error()})
+	default:
+		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "チケットを完了できませんでした。しばらくしてから、もう一度試してください"})
 	}
 }

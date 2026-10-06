@@ -6,7 +6,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	"escalator/domain"
+	"escalator/entity"
 	"escalator/usecase"
 )
 
@@ -22,7 +22,7 @@ func NewMeAPI(current *usecase.CurrentUser) *MeAPI {
 func (a *MeAPI) Show(c echo.Context) error {
 	user, err := a.current.Execute(c.Request().Context(), c.Request().Header.Get("Authorization"))
 	if err != nil {
-		if errors.Is(err, domain.ErrUnauthenticated) {
+		if errors.Is(err, entity.ErrUnauthenticated) {
 			return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})
 		}
 		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "ログイン中の利用者を確認できませんでした。もう一度ログインしてください"})

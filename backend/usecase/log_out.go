@@ -3,15 +3,15 @@ package usecase
 import (
 	"context"
 
-	"escalator/domain"
-	"escalator/infra/token"
+	"escalator/repository"
+	"escalator/usecase/crypto"
 )
 
 type LogOut struct {
-	sessions domain.SessionRepository
+	sessions repository.SessionRepository
 }
 
-func NewLogOut(sessions domain.SessionRepository) *LogOut {
+func NewLogOut(sessions repository.SessionRepository) *LogOut {
 	return &LogOut{sessions: sessions}
 }
 
@@ -20,5 +20,5 @@ func (l *LogOut) Execute(ctx context.Context, refreshToken string) error {
 	if refreshToken == "" {
 		return nil
 	}
-	return l.sessions.RevokeByHash(ctx, token.Hash(refreshToken))
+	return l.sessions.RevokeByHash(ctx, crypto.Hash(refreshToken))
 }

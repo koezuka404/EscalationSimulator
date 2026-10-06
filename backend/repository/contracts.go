@@ -1,0 +1,47 @@
+package repository
+
+import (
+	"context"
+	"time"
+
+	"escalator/entity"
+)
+
+type CustomerRepository interface {
+	Save(ctx context.Context, customer entity.Customer) (entity.Customer, error)
+	FindByID(ctx context.Context, id string) (entity.Customer, error)
+	List(ctx context.Context) ([]entity.Customer, error)
+	Update(ctx context.Context, customer entity.Customer) error
+}
+
+type UserRepository interface {
+	Save(ctx context.Context, user entity.User) (entity.User, error)
+	FindByID(ctx context.Context, id string) (entity.User, error)
+	FindByEmail(ctx context.Context, email string) (entity.User, error)
+	UpdateLoginState(ctx context.Context, user entity.User) error
+	UpdateCustomer(ctx context.Context, user entity.User) error
+	BumpAuthVersion(ctx context.Context, id string) error
+}
+
+type SessionRepository interface {
+	Save(ctx context.Context, session entity.Session) error
+	RevokeByHash(ctx context.Context, tokenHash string) error
+	Rotate(ctx context.Context, oldHash string, next entity.Session, now time.Time) (userID string, reused bool, err error)
+}
+
+type TicketRepository interface {
+	Save(ctx context.Context, ticket entity.Ticket) (entity.Ticket, error)
+	FindByID(ctx context.Context, id string) (entity.Ticket, error)
+	ListOpen(ctx context.Context) ([]entity.Ticket, error)
+	Close(ctx context.Context, id, comment string, closedAt time.Time) (entity.Ticket, error)
+}
+
+type TicketQueue interface {
+	Enqueue(ctx context.Context, ticketID string, score int) error
+	PopMax(ctx context.Context) (ticketID string, score int, ok bool, err error)
+	Remove(ctx context.Context, ticketID string) error
+}
+
+type ClaimStore interface {
+	ClaimNext(ctx context.Context, agentID string, queue TicketQueue) (entity.Ticket, error)
+}

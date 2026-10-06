@@ -7,7 +7,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	"escalator/domain"
+	"escalator/entity"
 	"escalator/middleware"
 	"escalator/usecase"
 )
@@ -133,7 +133,7 @@ type userJSON struct {
 	Status     string `json:"status"`
 }
 
-func toUserJSON(user domain.User) userJSON {
+func toUserJSON(user entity.User) userJSON {
 	return userJSON{
 		ID:         user.ID,
 		Name:       user.Name,
@@ -146,11 +146,11 @@ func toUserJSON(user domain.User) userJSON {
 
 func writeSignUpError(c echo.Context, err error) error {
 	switch {
-	case errors.Is(err, domain.ErrInvalidUserName),
-		errors.Is(err, domain.ErrInvalidEmail),
-		errors.Is(err, domain.ErrInvalidPassword):
+	case errors.Is(err, entity.ErrInvalidUserName),
+		errors.Is(err, entity.ErrInvalidEmail),
+		errors.Is(err, entity.ErrInvalidPassword):
 		return c.JSON(http.StatusBadRequest, messageJSON{Message: err.Error()})
-	case errors.Is(err, domain.ErrEmailTaken):
+	case errors.Is(err, entity.ErrEmailTaken):
 		return c.JSON(http.StatusConflict, messageJSON{Message: err.Error()})
 	default:
 		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "登録できませんでした。しばらくしてから、もう一度試してください"})
@@ -158,7 +158,7 @@ func writeSignUpError(c echo.Context, err error) error {
 }
 
 func writeRefreshError(c echo.Context, api *AuthAPI, err error) error {
-	if errors.Is(err, domain.ErrInvalidRefresh) {
+	if errors.Is(err, entity.ErrInvalidRefresh) {
 		c.SetCookie(sessionCookie(api.refreshCookieName, "", -1, true, api.cookieSecure))
 		c.SetCookie(sessionCookie(api.csrfCookieName, "", -1, false, api.cookieSecure))
 		return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})
@@ -168,9 +168,9 @@ func writeRefreshError(c echo.Context, api *AuthAPI, err error) error {
 
 func writeLoginError(c echo.Context, err error) error {
 	switch {
-	case errors.Is(err, domain.ErrLoginFailed):
+	case errors.Is(err, entity.ErrLoginFailed):
 		return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})
-	case errors.Is(err, domain.ErrLoginLocked):
+	case errors.Is(err, entity.ErrLoginLocked):
 		return c.JSON(http.StatusTooManyRequests, messageJSON{Message: err.Error()})
 	default:
 		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "ログインできませんでした。しばらくしてから、もう一度試してください"})

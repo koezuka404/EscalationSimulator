@@ -1,4 +1,4 @@
-package postgres
+package repository
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
 
-	"escalator/domain"
+	"escalator/entity"
 )
 
 type userRow struct {
@@ -29,19 +29,19 @@ type userRow struct {
 
 func (userRow) TableName() string { return "users" }
 
-type UserRepository struct {
+type userRepository struct {
 	db *gorm.DB
 }
 
-func NewUserRepository(db *gorm.DB) *UserRepository {
-	return &UserRepository{db: db}
+func NewUserRepository(db *gorm.DB) UserRepository {
+	return &userRepository{db: db}
 }
 
 func MigrateUsers(db *gorm.DB) error {
 	return db.AutoMigrate(&userRow{})
 }
 
-func (r *UserRepository) Save(ctx context.Context, user domain.User) (domain.User, error) {
+func (r *userRepository) Save(ctx context.Context, user entity.User) (entity.User, error) {
 	if user.ID == "" {
 		user.ID = uuid.NewString()
 	}
@@ -49,38 +49,38 @@ func (r *UserRepository) Save(ctx context.Context, user domain.User) (domain.Use
 	if err := r.db.WithContext(ctx).Create(&row).Error; err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			return domain.User{}, domain.ErrEmailTaken
+			return entity.User{}, entity.ErrEmailTaken
 		}
-		return domain.User{}, err
+		return entity.User{}, err
 	}
 	return userFromRow(row), nil
 }
 
-func (r *UserRepository) FindByID(ctx context.Context, id string) (domain.User, error) {
+func (r *userRepository) FindByID(ctx context.Context, id string) (entity.User, error) {
 	var row userRow
 	err := r.db.WithContext(ctx).First(&row, "id = ?", id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return domain.User{}, domain.ErrUserNotFound
+		return entity.User{}, entity.ErrUserNotFound
 	}
 	if err != nil {
-		return domain.User{}, err
+		return entity.User{}, err
 	}
 	return userFromRow(row), nil
 }
 
-func (r *UserRepository) FindByEmail(ctx context.Context, email string) (domain.User, error) {
+func (r *userRepository) FindByEmail(ctx context.Context, email string) (entity.User, error) {
 	var row userRow
 	err := r.db.WithContext(ctx).First(&row, "email = ?", email).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return domain.User{}, domain.ErrUserNotFound
+		return entity.User{}, entity.ErrUserNotFound
 	}
 	if err != nil {
-		return domain.User{}, err
+		return entity.User{}, err
 	}
 	return userFromRow(row), nil
 }
 
-func (r *UserRepository) UpdateLoginState(ctx context.Context, user domain.User) error {
+func (r *userRepository) UpdateLoginState(ctx context.Context, user entity.User) error {
 	var lockedUntil any
 	if user.LockedUntil.IsZero() {
 		lockedUntil = nil
@@ -93,7 +93,7 @@ func (r *UserRepository) UpdateLoginState(ctx context.Context, user domain.User)
 	}).Error
 }
 
-func (r *UserRepository) UpdateCustomer(ctx context.Context, user domain.User) error {
+func (r *userRepository) UpdateCustomer(ctx context.Context, user entity.User) error {
 	result := r.db.WithContext(ctx).Model(&userRow{}).Where("id = ?", user.ID).Updates(map[string]any{
 		"customer_id":  user.CustomerID,
 		"auth_version": user.AuthVersion,
@@ -102,16 +102,16 @@ func (r *UserRepository) UpdateCustomer(ctx context.Context, user domain.User) e
 		return result.Error
 	}
 	if result.RowsAffected == 0 {
-		return domain.ErrUserNotFound
+		return entity.ErrUserNotFound
 	}
 	return nil
 }
 
-func (r *UserRepository) BumpAuthVersion(ctx context.Context, id string) error {
+func (r *userRepository) BumpAuthVersion(ctx context.Context, id string) error {
 	return r.db.WithContext(ctx).Model(&userRow{}).Where("id = ?", id).Update("auth_version", gorm.Expr("auth_version + 1")).Error
 }
 
-func userToRow(user domain.User) userRow {
+func userToRow(user entity.User) userRow {
 	return userRow{
 		ID:               user.ID,
 		Email:            user.Email,
@@ -126,15 +126,15 @@ func userToRow(user domain.User) userRow {
 	}
 }
 
-func userFromRow(row userRow) domain.User {
-	return domain.User{
+func userFromRow(row userRow) entity.User {
+	return entity.User{
 		ID:               row.ID,
 		Email:            row.Email,
 		PasswordHash:     row.PasswordHash,
 		Name:             row.Name,
-		Role:             domain.Role(row.Role),
+		Role:             entity.Role(row.Role),
 		CustomerID:       row.CustomerID,
-		Status:           domain.AccountStatus(row.Status),
+		Status:           entity.AccountStatus(row.Status),
 		AuthVersion:      row.AuthVersion,
 		FailedLoginCount: row.FailedLoginCount,
 		LockedUntil:      timeValue(row.LockedUntil),

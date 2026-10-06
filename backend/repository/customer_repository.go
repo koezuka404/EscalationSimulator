@@ -1,4 +1,4 @@
-package postgres
+package repository
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
-	"escalator/domain"
+	"escalator/entity"
 )
 
 type customerRow struct {
@@ -22,54 +22,54 @@ type customerRow struct {
 
 func (customerRow) TableName() string { return "customers" }
 
-type CustomerRepository struct {
+type customerRepository struct {
 	db *gorm.DB
 }
 
-func NewCustomerRepository(db *gorm.DB) *CustomerRepository {
-	return &CustomerRepository{db: db}
+func NewCustomerRepository(db *gorm.DB) CustomerRepository {
+	return &customerRepository{db: db}
 }
 
 func MigrateCustomers(db *gorm.DB) error {
 	return db.AutoMigrate(&customerRow{})
 }
 
-func (r *CustomerRepository) Save(ctx context.Context, customer domain.Customer) (domain.Customer, error) {
+func (r *customerRepository) Save(ctx context.Context, customer entity.Customer) (entity.Customer, error) {
 	if customer.ID == "" {
 		customer.ID = uuid.NewString()
 	}
 	row := toRow(customer)
 	if err := r.db.WithContext(ctx).Create(&row).Error; err != nil {
-		return domain.Customer{}, err
+		return entity.Customer{}, err
 	}
 	return toDomain(row), nil
 }
 
-func (r *CustomerRepository) FindByID(ctx context.Context, id string) (domain.Customer, error) {
+func (r *customerRepository) FindByID(ctx context.Context, id string) (entity.Customer, error) {
 	var row customerRow
 	err := r.db.WithContext(ctx).First(&row, "id = ?", id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return domain.Customer{}, domain.ErrCustomerNotFound
+		return entity.Customer{}, entity.ErrCustomerNotFound
 	}
 	if err != nil {
-		return domain.Customer{}, err
+		return entity.Customer{}, err
 	}
 	return toDomain(row), nil
 }
 
-func (r *CustomerRepository) List(ctx context.Context) ([]domain.Customer, error) {
+func (r *customerRepository) List(ctx context.Context) ([]entity.Customer, error) {
 	var rows []customerRow
 	if err := r.db.WithContext(ctx).Order("created_at, id").Find(&rows).Error; err != nil {
 		return nil, err
 	}
-	customers := make([]domain.Customer, 0, len(rows))
+	customers := make([]entity.Customer, 0, len(rows))
 	for _, row := range rows {
 		customers = append(customers, toDomain(row))
 	}
 	return customers, nil
 }
 
-func (r *CustomerRepository) Update(ctx context.Context, customer domain.Customer) error {
+func (r *customerRepository) Update(ctx context.Context, customer entity.Customer) error {
 	result := r.db.WithContext(ctx).Model(&customerRow{}).Where("id = ?", customer.ID).Updates(map[string]any{
 		"name":        customer.Name,
 		"plan":        string(customer.Plan),
@@ -79,12 +79,12 @@ func (r *CustomerRepository) Update(ctx context.Context, customer domain.Custome
 		return result.Error
 	}
 	if result.RowsAffected == 0 {
-		return domain.ErrCustomerNotFound
+		return entity.ErrCustomerNotFound
 	}
 	return nil
 }
 
-func toRow(customer domain.Customer) customerRow {
+func toRow(customer entity.Customer) customerRow {
 	return customerRow{
 		ID:         customer.ID,
 		Name:       customer.Name,
@@ -93,11 +93,11 @@ func toRow(customer domain.Customer) customerRow {
 	}
 }
 
-func toDomain(row customerRow) domain.Customer {
-	return domain.Customer{
+func toDomain(row customerRow) entity.Customer {
+	return entity.Customer{
 		ID:         row.ID,
 		Name:       row.Name,
-		Plan:       domain.Plan(row.Plan),
+		Plan:       entity.Plan(row.Plan),
 		SLAMinutes: row.SLAMinutes,
 	}
 }

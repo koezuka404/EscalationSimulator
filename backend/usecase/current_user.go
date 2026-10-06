@@ -4,34 +4,35 @@ import (
 	"context"
 	"strings"
 
-	"escalator/domain"
-	"escalator/infra/token"
+	"escalator/entity"
+	"escalator/repository"
+	"escalator/usecase/crypto"
 )
 
 type CurrentUser struct {
-	users    domain.UserRepository
+	users    repository.UserRepository
 	secret   []byte
 	issuer   string
 	audience string
 }
 
-func NewCurrentUser(users domain.UserRepository, secret []byte, issuer, audience string) *CurrentUser {
+func NewCurrentUser(users repository.UserRepository, secret []byte, issuer, audience string) *CurrentUser {
 	return &CurrentUser{users: users, secret: secret, issuer: issuer, audience: audience}
 }
 
 //ログイン用トークンから、今の利用者を取る
-func (c *CurrentUser) Execute(ctx context.Context, authorization string) (domain.User, error) {
+func (c *CurrentUser) Execute(ctx context.Context, authorization string) (entity.User, error) {
 	raw := bearerToken(authorization)
 	if raw == "" {
-		return domain.User{}, domain.ErrUnauthenticated
+		return entity.User{}, entity.ErrUnauthenticated
 	}
-	userID, authVersion, err := token.ParseAccess(c.secret, c.issuer, c.audience, raw)
+	userID, authVersion, err := crypto.ParseAccess(c.secret, c.issuer, c.audience, raw)
 	if err != nil || userID == "" {
-		return domain.User{}, domain.ErrUnauthenticated
+		return entity.User{}, entity.ErrUnauthenticated
 	}
 	user, err := c.users.FindByID(ctx, userID)
-	if err != nil || user.Status != domain.StatusActive || user.AuthVersion != authVersion {
-		return domain.User{}, domain.ErrUnauthenticated
+	if err != nil || user.Status != entity.StatusActive || user.AuthVersion != authVersion {
+		return entity.User{}, entity.ErrUnauthenticated
 	}
 	return user, nil
 }

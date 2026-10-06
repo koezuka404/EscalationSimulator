@@ -1,13 +1,13 @@
-package postgres
+package repository
 
 import (
 	"context"
 
-	"escalator/domain"
+	"escalator/entity"
 )
 
 //顧客が1件も無いときだけ、サンプルの顧客を登録する
-func SeedCustomersIfEmpty(ctx context.Context, repo *CustomerRepository) error {
+func SeedCustomersIfEmpty(ctx context.Context, repo CustomerRepository) error {
 	customers, err := repo.List(ctx)
 	if err != nil {
 		return err
@@ -18,18 +18,18 @@ func SeedCustomersIfEmpty(ctx context.Context, repo *CustomerRepository) error {
 
 	samples := []struct {
 		name string
-		plan domain.Plan
+		plan entity.Plan
 	}{
-		{name: "サンプル Free", plan: domain.PlanFree},
-		{name: "サンプル Pro", plan: domain.PlanPro},
-		{name: "サンプル Enterprise", plan: domain.PlanEnterprise},
+		{name: "サンプル Free", plan: entity.PlanFree},
+		{name: "サンプル Pro", plan: entity.PlanPro},
+		{name: "サンプル Enterprise", plan: entity.PlanEnterprise},
 	}
 	for _, sample := range samples {
-		slaMinutes, err := domain.DefaultSLAMinutes(sample.plan)
+		slaMinutes, err := entity.DefaultSLAMinutes(sample.plan)
 		if err != nil {
 			return err
 		}
-		customer, err := domain.NewCustomer(sample.name, sample.plan, slaMinutes)
+		customer, err := entity.NewCustomer(sample.name, sample.plan, slaMinutes)
 		if err != nil {
 			return err
 		}

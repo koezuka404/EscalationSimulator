@@ -13,8 +13,9 @@ import (
 
 	"escalator/config"
 	"escalator/controller"
-	"escalator/infra/postgres"
+	"escalator/db"
 	"escalator/redis"
+	"escalator/repository"
 	"escalator/router"
 	"escalator/usecase"
 )
@@ -27,39 +28,23 @@ func main() {
 		os.Exit(1)
 	}
 
-	db, err := postgres.Open(cfg.DatabaseURL)
+	conn, err := db.Open(cfg.DatabaseURL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "データベースに接続できませんでした: %v\n", err)
 		os.Exit(1)
 	}
-	sqlDB, err := db.DB()
+	sqlDB, err := conn.DB()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "データベースに接続できませんでした: %v\n", err)
 		os.Exit(1)
 	}
 	defer sqlDB.Close()
 
-	if err := postgres.MigrateCustomers(db); err != nil {
-		fmt.Fprintf(os.Stderr, "顧客用のテーブルを作成できませんでした: %v\n", err)
+	if err := repository.Migrate(conn); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
-	if err := postgres.MigrateUsers(db); err != nil {
-		fmt.Fprintf(os.Stderr, "利用者用のテーブルを作成できませんでした: %v\n", err)
-		os.Exit(1)
-	}
-	if err := postgres.MigrateSessions(db); err != nil {
-		fmt.Fprintf(os.Stderr, "ログイン用のテーブルを作成できませんでした: %v\n", err)
-		os.Exit(1)
-	}
-	if err := postgres.MigrateTickets(db); err != nil {
-		fmt.Fprintf(os.Stderr, "チケット用のテーブルを作成できませんでした: %v\n", err)
-		os.Exit(1)
-	}
-	if err := postgres.MigrateAgentStatuses(db); err != nil {
-		fmt.Fprintf(os.Stderr, "担当者の稼働用のテーブルを作成できませんでした: %v\n", err)
-		os.Exit(1)
-	}
-	if err := postgres.SeedCustomersIfEmpty(context.Background(), postgres.NewCustomerRepository(db)); err != nil {
+	if err := repository.SeedCustomersIfEmpty(context.Background(), repository.NewCustomerRepository(conn)); err != nil {
 		fmt.Fprintf(os.Stderr, "サンプルの顧客を登録できませんでした: %v\n", err)
 		os.Exit(1)
 	}
@@ -74,18 +59,21 @@ func main() {
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
-	users := postgres.NewUserRepository(db)
-	sessions := postgres.NewSessionRepository(db)
-	customers := postgres.NewCustomerRepository(db)
+	users := repository.NewUserRepository(conn)
+	sessions := repository.NewSessionRepository(conn)
+	customers := repository.NewCustomerRepository(conn)
 	router.Customers(e, controller.NewCustomerAPI(usecase.NewCustomers(customers)))
 	current := usecase.NewCurrentUser(users, []byte(cfg.JWTSecret), cfg.JWTIssuer, cfg.JWTAudience)
 	router.Me(e, controller.NewMeAPI(current))
 	router.Users(e, controller.NewUserAPI(usecase.NewLinkApplicant(users, customers, current)))
-	tickets := postgres.NewTicketRepository(db)
-	router.Tickets(e, controller.NewTicketAPI(usecase.NewCreateTicket(tickets, customers, current, order)))
+	tickets := repository.NewTicketRepository(conn)
+	router.Tickets(e, controller.NewTicketAPI(
+		usecase.NewCreateTicket(tickets, customers, current, order),
+		usecase.NewCloseTicket(tickets, order, current),
+	))
 	router.Queue(e, controller.NewQueueAPI(
 		usecase.NewListWaitingTickets(tickets, customers, current),
-		usecase.NewClaimNextTicket(postgres.NewClaimRepository(db), order, current),
+		usecase.NewClaimNextTicket(repository.NewClaimRepository(conn), order, current),
 	))
 	router.Auth(e, controller.NewAuthAPI(
 		usecase.NewSignUp(users, cfg.BcryptCost),

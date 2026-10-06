@@ -1,4 +1,4 @@
-package postgres
+package repository
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"escalator/domain"
+	"escalator/entity"
 )
 
 type sessionRow struct {
@@ -24,19 +24,19 @@ type sessionRow struct {
 
 func (sessionRow) TableName() string { return "sessions" }
 
-type SessionRepository struct {
+type sessionRepository struct {
 	db *gorm.DB
 }
 
-func NewSessionRepository(db *gorm.DB) *SessionRepository {
-	return &SessionRepository{db: db}
+func NewSessionRepository(db *gorm.DB) SessionRepository {
+	return &sessionRepository{db: db}
 }
 
 func MigrateSessions(db *gorm.DB) error {
 	return db.AutoMigrate(&sessionRow{})
 }
 
-func (r *SessionRepository) Save(ctx context.Context, session domain.Session) error {
+func (r *sessionRepository) Save(ctx context.Context, session entity.Session) error {
 	if session.ID == "" {
 		session.ID = uuid.NewString()
 	}
@@ -50,19 +50,19 @@ func (r *SessionRepository) Save(ctx context.Context, session domain.Session) er
 	return r.db.WithContext(ctx).Create(&row).Error
 }
 
-func (r *SessionRepository) RevokeByHash(ctx context.Context, tokenHash string) error {
+func (r *sessionRepository) RevokeByHash(ctx context.Context, tokenHash string) error {
 	return r.db.WithContext(ctx).Model(&sessionRow{}).Where("token_hash = ?", tokenHash).Update("revoked", true).Error
 }
 
 //再ログイン用の印を新しい印に替える古い印の再使用は系統ごと無効にする
-func (r *SessionRepository) Rotate(ctx context.Context, oldHash string, next domain.Session, now time.Time) (string, bool, error) {
+func (r *sessionRepository) Rotate(ctx context.Context, oldHash string, next entity.Session, now time.Time) (string, bool, error) {
 	var userID string
 	var reused bool
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var row sessionRow
 		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("token_hash = ?", oldHash).First(&row).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return domain.ErrInvalidRefresh
+			return entity.ErrInvalidRefresh
 		}
 		if err != nil {
 			return err
@@ -73,7 +73,7 @@ func (r *SessionRepository) Rotate(ctx context.Context, oldHash string, next dom
 			return tx.Model(&sessionRow{}).Where("family_id = ?", row.FamilyID).Update("revoked", true).Error
 		}
 		if !row.ExpiresAt.After(now) {
-			return domain.ErrInvalidRefresh
+			return entity.ErrInvalidRefresh
 		}
 		if err := tx.Model(&sessionRow{}).Where("id = ?", row.ID).Update("revoked", true).Error; err != nil {
 			return err
