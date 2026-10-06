@@ -47,21 +47,22 @@ type createTicketJSON struct {
 }
 
 type ticketJSON struct {
-	ID            string    `json:"id"`
-	CustomerID    string    `json:"customer_id"`
-	CreatedBy     string    `json:"created_by"`
-	Title         string    `json:"title"`
-	Description   string    `json:"description"`
-	Category      string    `json:"category"`
-	Severity      int       `json:"severity"`
-	Status        string    `json:"status"`
-	AssigneeID    string    `json:"assignee_id"`
-	PriorityScore int       `json:"priority_score"`
-	CreatedAt     time.Time `json:"created_at"`
+	ID            string     `json:"id"`
+	CustomerID    string     `json:"customer_id"`
+	CreatedBy     string     `json:"created_by"`
+	Title         string     `json:"title"`
+	Description   string     `json:"description"`
+	Category      string     `json:"category"`
+	Severity      int        `json:"severity"`
+	Status        string     `json:"status"`
+	AssigneeID    string     `json:"assignee_id"`
+	PriorityScore int        `json:"priority_score"`
+	CreatedAt     time.Time  `json:"created_at"`
+	ClaimedAt     *time.Time `json:"claimed_at,omitempty"`
 }
 
 func toTicketJSON(ticket domain.Ticket) ticketJSON {
-	return ticketJSON{
+	body := ticketJSON{
 		ID:            ticket.ID,
 		CustomerID:    ticket.CustomerID,
 		CreatedBy:     ticket.CreatedBy,
@@ -74,6 +75,11 @@ func toTicketJSON(ticket domain.Ticket) ticketJSON {
 		PriorityScore: ticket.PriorityScore,
 		CreatedAt:     ticket.CreatedAt,
 	}
+	if !ticket.ClaimedAt.IsZero() {
+		claimedAt := ticket.ClaimedAt
+		body.ClaimedAt = &claimedAt
+	}
+	return body
 }
 
 func writeCreateTicketError(c echo.Context, err error) error {

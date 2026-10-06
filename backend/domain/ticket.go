@@ -33,6 +33,11 @@ var (
 	ErrCustomerRequired   = errors.New("所属顧客が設定されていません")
 	ErrTicketNotFound     = errors.New("チケットが見つかりませんでした")
 	ErrQueueForbidden     = errors.New("待ち順を見られるのは担当者と管理者だけです")
+	ErrClaimAgent         = errors.New("次を引き取れるのは担当者だけです")
+	ErrNotWaiting         = errors.New("待機中のときだけ引き取れます")
+	ErrAgentBusy          = errors.New("対応中のチケットがあります")
+	ErrQueueEmpty         = errors.New("待ちチケットがありません")
+	ErrQueueUnavailable   = errors.New("待ち順を一時的に利用できません")
 )
 
 type Ticket struct {
@@ -47,6 +52,7 @@ type Ticket struct {
 	AssigneeID    string
 	PriorityScore int
 	CreatedAt     time.Time
+	ClaimedAt     time.Time
 }
 
 //件名、詳細、種類、緊急度を確かめて、対応待ちのチケットを作る

@@ -55,6 +55,10 @@ func main() {
 		fmt.Fprintf(os.Stderr, "チケット用のテーブルを作成できませんでした: %v\n", err)
 		os.Exit(1)
 	}
+	if err := postgres.MigrateAgentStatuses(db); err != nil {
+		fmt.Fprintf(os.Stderr, "担当者の稼働用のテーブルを作成できませんでした: %v\n", err)
+		os.Exit(1)
+	}
 	if err := postgres.SeedCustomersIfEmpty(context.Background(), postgres.NewCustomerRepository(db)); err != nil {
 		fmt.Fprintf(os.Stderr, "サンプルの顧客を登録できませんでした: %v\n", err)
 		os.Exit(1)
@@ -79,7 +83,10 @@ func main() {
 	router.Users(e, controller.NewUserAPI(usecase.NewLinkApplicant(users, customers, current)))
 	tickets := postgres.NewTicketRepository(db)
 	router.Tickets(e, controller.NewTicketAPI(usecase.NewCreateTicket(tickets, customers, current, order)))
-	router.Queue(e, controller.NewQueueAPI(usecase.NewListWaitingTickets(tickets, customers, current)))
+	router.Queue(e, controller.NewQueueAPI(
+		usecase.NewListWaitingTickets(tickets, customers, current),
+		usecase.NewClaimNextTicket(postgres.NewClaimRepository(db), order, current),
+	))
 	router.Auth(e, controller.NewAuthAPI(
 		usecase.NewSignUp(users, cfg.BcryptCost),
 		usecase.NewLogIn(users, sessions, []byte(cfg.JWTSecret), cfg.JWTIssuer, cfg.JWTAudience, cfg.AccessTokenTTL, cfg.RefreshTokenTTL, cfg.LoginMaxFailures, cfg.LoginLock),

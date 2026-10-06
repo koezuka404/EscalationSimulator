@@ -2,6 +2,7 @@ package redis
 
 import (
 	"context"
+	"math"
 	"time"
 
 	goredis "github.com/redis/go-redis/v9"
@@ -39,4 +40,23 @@ func (o *TicketOrder) Enqueue(ctx context.Context, ticketID string, score int) e
 		Score:  float64(score),
 		Member: ticketID,
 	}).Err()
+}
+
+//点数がいちばん高い1件を取り待ち順から消す
+func (o *TicketOrder) PopMax(ctx context.Context) (string, int, bool, error) {
+	values, err := o.client.ZPopMax(ctx, ticketQueueKey, 1).Result()
+	if err == goredis.Nil {
+		return "", 0, false, nil
+	}
+	if err != nil {
+		return "", 0, false, err
+	}
+	if len(values) == 0 {
+		return "", 0, false, nil
+	}
+	id, ok := values[0].Member.(string)
+	if !ok || id == "" {
+		return "", 0, false, goredis.Nil
+	}
+	return id, int(math.Round(values[0].Score)), true, nil
 }

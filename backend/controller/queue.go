@@ -11,11 +11,12 @@ import (
 )
 
 type QueueAPI struct {
-	list *usecase.ListWaitingTickets
+	list  *usecase.ListWaitingTickets
+	claim *usecase.ClaimNextTicket
 }
 
-func NewQueueAPI(list *usecase.ListWaitingTickets) *QueueAPI {
-	return &QueueAPI{list: list}
+func NewQueueAPI(list *usecase.ListWaitingTickets, claim *usecase.ClaimNextTicket) *QueueAPI {
+	return &QueueAPI{list: list, claim: claim}
 }
 
 //待ち順の一覧を返す
@@ -29,6 +30,15 @@ func (a *QueueAPI) List(c echo.Context) error {
 		body = append(body, toWaitingTicketJSON(ticket))
 	}
 	return c.JSON(http.StatusOK, body)
+}
+
+//次の1件の引き取りを受ける
+func (a *QueueAPI) Claim(c echo.Context) error {
+	ticket, err := a.claim.Execute(c.Request().Context(), c.Request().Header.Get("Authorization"))
+	if err != nil {
+		return writeClaimError(c, err)
+	}
+	return c.JSON(http.StatusOK, toTicketJSON(ticket))
 }
 
 type waitingTicketJSON struct {
@@ -69,5 +79,22 @@ func writeQueueError(c echo.Context, err error) error {
 		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
 	default:
 		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "待ち順を表示できませんでした。しばらくしてから、もう一度試してください"})
+	}
+}
+
+func writeClaimError(c echo.Context, err error) error {
+	switch {
+	case errors.Is(err, domain.ErrUnauthenticated):
+		return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})
+	case errors.Is(err, domain.ErrClaimAgent):
+		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
+	case errors.Is(err, domain.ErrNotWaiting),
+		errors.Is(err, domain.ErrAgentBusy),
+		errors.Is(err, domain.ErrQueueEmpty):
+		return c.JSON(http.StatusConflict, messageJSON{Message: err.Error()})
+	case errors.Is(err, domain.ErrQueueUnavailable):
+		return c.JSON(http.StatusServiceUnavailable, messageJSON{Message: err.Error()})
+	default:
+		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "チケットを引き取れませんでした。しばらくしてから、もう一度試してください"})
 	}
 }

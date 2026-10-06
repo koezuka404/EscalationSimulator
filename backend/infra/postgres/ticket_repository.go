@@ -22,6 +22,7 @@ type ticketRow struct {
 	AssigneeID    string
 	PriorityScore int
 	CreatedAt     time.Time
+	ClaimedAt     *time.Time
 	UpdatedAt     time.Time
 }
 
@@ -82,11 +83,12 @@ func (r *TicketRepository) ListOpen(ctx context.Context) ([]domain.Ticket, error
 }
 
 func toTicket(row ticketRow) domain.Ticket {
-	return domain.Ticket{
+	ticket := domain.Ticket{
 		ID:            row.ID,
 		CustomerID:    row.CustomerID,
 		CreatedBy:     row.CreatedBy,
 		Title:         row.Title,
+		Description:   row.Description,
 		Severity:      row.Severity,
 		Category:      domain.Category(row.Category),
 		Status:        domain.TicketStatus(row.Status),
@@ -94,4 +96,8 @@ func toTicket(row ticketRow) domain.Ticket {
 		PriorityScore: row.PriorityScore,
 		CreatedAt:     row.CreatedAt,
 	}
+	if row.ClaimedAt != nil {
+		ticket.ClaimedAt = *row.ClaimedAt
+	}
+	return ticket
 }
