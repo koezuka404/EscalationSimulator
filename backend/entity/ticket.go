@@ -49,7 +49,16 @@ var (
 	ErrSeverityRaise         = errors.New("緊急度を上げられるのは、自分の対応中のチケットだけです")
 	ErrReleaseForbidden      = errors.New("担当を外せるのは管理者だけです")
 	ErrMyTicketsForbidden    = errors.New("自分のチケットを見られるのは申請者だけです")
+	ErrTicketHidden          = errors.New("このチケットを見られるのは、担当した人と管理者だけです")
 )
+
+type SeverityChange struct {
+	FromSeverity int
+	ToSeverity   int
+	Reason       string
+	ChangedBy    string
+	CreatedAt    time.Time
+}
 
 type Ticket struct {
 	ID            string
@@ -106,6 +115,26 @@ func SeverityReason(reason string) (string, error) {
 		return "", ErrInvalidSeverityReason
 	}
 	return reason, nil
+}
+
+//チケットの詳細を見られるか確かめる
+func CanViewTicket(role Role, actorID string, ticket Ticket) error {
+	switch role {
+	case RoleAdmin:
+		return nil
+	case RoleApplicant:
+		if ticket.CreatedBy != actorID {
+			return ErrTicketNotFound
+		}
+		return nil
+	case RoleAgent:
+		if ticket.Status == TicketOpen || ticket.AssigneeID == actorID {
+			return nil
+		}
+		return ErrTicketHidden
+	default:
+		return ErrTicketNotFound
+	}
 }
 
 //緊急度を変えてよいかを確かめる

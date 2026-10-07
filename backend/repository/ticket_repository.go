@@ -291,6 +291,30 @@ func (r *ticketRepository) ListByCreator(ctx context.Context, createdBy string) 
 	return tickets, nil
 }
 
+//緊急度の変更履歴を古い順で返す
+func (r *ticketRepository) ListSeverityChanges(ctx context.Context, ticketID string) ([]entity.SeverityChange, error) {
+	var rows []severityHistoryRow
+	err := r.db.WithContext(ctx).
+		Where("ticket_id = ?", ticketID).
+		Order("created_at ASC").
+		Order("id ASC").
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	changes := make([]entity.SeverityChange, 0, len(rows))
+	for _, row := range rows {
+		changes = append(changes, entity.SeverityChange{
+			FromSeverity: row.FromSeverity,
+			ToSeverity:   row.ToSeverity,
+			Reason:       row.Reason,
+			ChangedBy:    row.ChangedBy,
+			CreatedAt:    row.CreatedAt,
+		})
+	}
+	return changes, nil
+}
+
 //対応待ちのチケットを返す詳細の本文は読まない
 func (r *ticketRepository) ListOpen(ctx context.Context) ([]entity.Ticket, error) {
 	var rows []ticketRow

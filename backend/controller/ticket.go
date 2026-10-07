@@ -17,10 +17,11 @@ type TicketAPI struct {
 	severity *usecase.ChangeSeverity
 	release  *usecase.ReturnTicketToQueue
 	mine     *usecase.ListMyTickets
+	show     *usecase.ShowTicket
 }
 
-func NewTicketAPI(create *usecase.CreateTicket, close *usecase.CloseTicket, severity *usecase.ChangeSeverity, release *usecase.ReturnTicketToQueue, mine *usecase.ListMyTickets) *TicketAPI {
-	return &TicketAPI{create: create, close: close, severity: severity, release: release, mine: mine}
+func NewTicketAPI(create *usecase.CreateTicket, close *usecase.CloseTicket, severity *usecase.ChangeSeverity, release *usecase.ReturnTicketToQueue, mine *usecase.ListMyTickets, show *usecase.ShowTicket) *TicketAPI {
+	return &TicketAPI{create: create, close: close, severity: severity, release: release, mine: mine, show: show}
 }
 
 //申請者の自分のチケット一覧を返す
@@ -34,6 +35,15 @@ func (a *TicketAPI) ListMine(c echo.Context) error {
 		body = append(body, toMyTicketJSON(ticket))
 	}
 	return c.JSON(http.StatusOK, body)
+}
+
+//チケットの詳細を返す
+func (a *TicketAPI) Show(c echo.Context) error {
+	detail, err := a.show.Execute(c.Request().Context(), c.Request().Header.Get("Authorization"), c.Param("id"))
+	if err != nil {
+		return writeShowTicketError(c, err)
+	}
+	return c.JSON(http.StatusOK, toTicketDetailJSON(detail))
 }
 
 //チケットの起票を受ける
@@ -119,6 +129,86 @@ func toMyTicketJSON(ticket usecase.MyTicket) myTicketJSON {
 		Overdue:          ticket.Overdue,
 		OverdueMinutes:   ticket.OverdueMinutes,
 		AssigneeName:     ticket.AssigneeName,
+	}
+}
+
+type severityChangeJSON struct {
+	FromSeverity  int       `json:"from_severity"`
+	ToSeverity    int       `json:"to_severity"`
+	Reason        string    `json:"reason"`
+	ChangedByName string    `json:"changed_by_name"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
+type ticketDetailJSON struct {
+	ID              string               `json:"id"`
+	Title           string               `json:"title"`
+	Description     string               `json:"description"`
+	Severity        int                  `json:"severity"`
+	Category        string               `json:"category"`
+	CustomerID      string               `json:"customer_id"`
+	CustomerName    string               `json:"customer_name"`
+	Plan            string               `json:"plan"`
+	Status          string               `json:"status"`
+	AssigneeID      string               `json:"assignee_id"`
+	AssigneeName    string               `json:"assignee_name"`
+	PriorityScore   int                  `json:"priority_score"`
+	CreatedAt       time.Time            `json:"created_at"`
+	ClaimedAt       *time.Time           `json:"claimed_at,omitempty"`
+	ClosedAt        *time.Time           `json:"closed_at,omitempty"`
+	CloseComment    string               `json:"close_comment,omitempty"`
+	SeverityChanges []severityChangeJSON `json:"severity_changes"`
+}
+
+func toTicketDetailJSON(detail usecase.TicketDetail) ticketDetailJSON {
+	changes := make([]severityChangeJSON, 0, len(detail.SeverityChanges))
+	for _, change := range detail.SeverityChanges {
+		changes = append(changes, severityChangeJSON{
+			FromSeverity:  change.FromSeverity,
+			ToSeverity:    change.ToSeverity,
+			Reason:        change.Reason,
+			ChangedByName: change.ChangedByName,
+			CreatedAt:     change.CreatedAt,
+		})
+	}
+	body := ticketDetailJSON{
+		ID:              detail.Ticket.ID,
+		Title:           detail.Ticket.Title,
+		Description:     detail.Ticket.Description,
+		Severity:        detail.Ticket.Severity,
+		Category:        string(detail.Ticket.Category),
+		CustomerID:      detail.Ticket.CustomerID,
+		CustomerName:    detail.CustomerName,
+		Plan:            string(detail.Plan),
+		Status:          string(detail.Ticket.Status),
+		AssigneeID:      detail.Ticket.AssigneeID,
+		AssigneeName:    detail.AssigneeName,
+		PriorityScore:   detail.Ticket.PriorityScore,
+		CreatedAt:       detail.Ticket.CreatedAt,
+		CloseComment:    detail.Ticket.CloseComment,
+		SeverityChanges: changes,
+	}
+	if !detail.Ticket.ClaimedAt.IsZero() {
+		claimedAt := detail.Ticket.ClaimedAt
+		body.ClaimedAt = &claimedAt
+	}
+	if !detail.Ticket.ClosedAt.IsZero() {
+		closedAt := detail.Ticket.ClosedAt
+		body.ClosedAt = &closedAt
+	}
+	return body
+}
+
+func writeShowTicketError(c echo.Context, err error) error {
+	switch {
+	case errors.Is(err, entity.ErrUnauthenticated):
+		return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})
+	case errors.Is(err, entity.ErrTicketHidden):
+		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
+	case errors.Is(err, entity.ErrTicketNotFound):
+		return c.JSON(http.StatusNotFound, messageJSON{Message: err.Error()})
+	default:
+		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "チケットの詳細を返せませんでした。しばらくしてから、もう一度試してください"})
 	}
 }
 
