@@ -36,6 +36,8 @@ type TicketRepository interface {
 	ListOpen(ctx context.Context) ([]entity.Ticket, error)
 	ListByCreator(ctx context.Context, createdBy string) ([]entity.Ticket, error)
 	ListSeverityChanges(ctx context.Context, ticketID string) ([]entity.SeverityChange, error)
+	AddWorkNote(ctx context.Context, ticketID, userID, body string, createdAt time.Time) (entity.WorkNote, error)
+	ListWorkNotes(ctx context.Context, ticketID string) ([]entity.WorkNote, error)
 	Close(ctx context.Context, id, comment string, closedAt time.Time) (entity.Ticket, error)
 	UpdateSeverity(ctx context.Context, id string, severity, planScore, slaMinutes int, reason, changedBy string, now time.Time) (entity.Ticket, error)
 	UpdateOpenScore(ctx context.Context, id string, score int, now time.Time) (bool, error)
@@ -46,6 +48,11 @@ type TicketQueue interface {
 	Enqueue(ctx context.Context, ticketID string, score int) error
 	PopMax(ctx context.Context) (ticketID string, score int, ok bool, err error)
 	Remove(ctx context.Context, ticketID string) error
+}
+
+type AgentStatusRepository interface {
+	GoAvailable(ctx context.Context, agentID string, now time.Time) error
+	GoOffline(ctx context.Context, agentID string, now time.Time, scoreOf func(entity.Ticket) (int, error)) ([]entity.Ticket, error)
 }
 
 type ClaimStore interface {

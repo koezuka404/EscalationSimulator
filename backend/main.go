@@ -75,7 +75,9 @@ func main() {
 		usecase.NewReturnTicketToQueue(tickets, customers, order, current),
 		usecase.NewListMyTickets(tickets, customers, users, current),
 		usecase.NewShowTicket(tickets, customers, users, current),
+		usecase.NewAddWorkNote(tickets, current),
 	))
+	router.Agent(e, controller.NewAgentAPI(usecase.NewChangeAgentStatus(users, customers, repository.NewAgentStatusRepository(conn), order, current)))
 	router.Queue(e, controller.NewQueueAPI(
 		usecase.NewListWaitingTickets(tickets, customers, current),
 		usecase.NewClaimNextTicket(repository.NewClaimRepository(conn), order, current),

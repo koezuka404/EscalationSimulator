@@ -18,10 +18,11 @@ type TicketAPI struct {
 	release  *usecase.ReturnTicketToQueue
 	mine     *usecase.ListMyTickets
 	show     *usecase.ShowTicket
+	note     *usecase.AddWorkNote
 }
 
-func NewTicketAPI(create *usecase.CreateTicket, close *usecase.CloseTicket, severity *usecase.ChangeSeverity, release *usecase.ReturnTicketToQueue, mine *usecase.ListMyTickets, show *usecase.ShowTicket) *TicketAPI {
-	return &TicketAPI{create: create, close: close, severity: severity, release: release, mine: mine, show: show}
+func NewTicketAPI(create *usecase.CreateTicket, close *usecase.CloseTicket, severity *usecase.ChangeSeverity, release *usecase.ReturnTicketToQueue, mine *usecase.ListMyTickets, show *usecase.ShowTicket, note *usecase.AddWorkNote) *TicketAPI {
+	return &TicketAPI{create: create, close: close, severity: severity, release: release, mine: mine, show: show, note: note}
 }
 
 //申請者の自分のチケット一覧を返す
@@ -44,6 +45,25 @@ func (a *TicketAPI) Show(c echo.Context) error {
 		return writeShowTicketError(c, err)
 	}
 	return c.JSON(http.StatusOK, toTicketDetailJSON(detail))
+}
+
+//対応メモの追加を受ける
+func (a *TicketAPI) AddNote(c echo.Context) error {
+	var body workNoteRequestJSON
+	if err := c.Bind(&body); err != nil {
+		return c.JSON(http.StatusBadRequest, messageJSON{Message: "送られた内容を読み取れませんでした。対応メモを入力してください"})
+	}
+	note, err := a.note.Execute(c.Request().Context(), c.Request().Header.Get("Authorization"), c.Param("id"), body.Body)
+	if err != nil {
+		return writeWorkNoteError(c, err)
+	}
+	return c.JSON(http.StatusCreated, savedWorkNoteJSON{
+		ID:         note.ID,
+		TicketID:   note.TicketID,
+		Body:       note.Body,
+		AuthorName: note.AuthorName,
+		CreatedAt:  note.CreatedAt,
+	})
 }
 
 //チケットの起票を受ける
@@ -157,10 +177,39 @@ type ticketDetailJSON struct {
 	ClaimedAt       *time.Time           `json:"claimed_at,omitempty"`
 	ClosedAt        *time.Time           `json:"closed_at,omitempty"`
 	CloseComment    string               `json:"close_comment,omitempty"`
+	WorkNotes       []workNoteJSON       `json:"work_notes"`
 	SeverityChanges []severityChangeJSON `json:"severity_changes"`
 }
 
+type workNoteRequestJSON struct {
+	Body string `json:"body"`
+}
+
+type workNoteJSON struct {
+	ID         string    `json:"id"`
+	Body       string    `json:"body"`
+	AuthorName string    `json:"author_name"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+type savedWorkNoteJSON struct {
+	ID         string    `json:"id"`
+	TicketID   string    `json:"ticket_id"`
+	Body       string    `json:"body"`
+	AuthorName string    `json:"author_name"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
 func toTicketDetailJSON(detail usecase.TicketDetail) ticketDetailJSON {
+	notes := make([]workNoteJSON, 0, len(detail.WorkNotes))
+	for _, note := range detail.WorkNotes {
+		notes = append(notes, workNoteJSON{
+			ID:         note.ID,
+			Body:       note.Body,
+			AuthorName: note.AuthorName,
+			CreatedAt:  note.CreatedAt,
+		})
+	}
 	changes := make([]severityChangeJSON, 0, len(detail.SeverityChanges))
 	for _, change := range detail.SeverityChanges {
 		changes = append(changes, severityChangeJSON{
@@ -186,6 +235,7 @@ func toTicketDetailJSON(detail usecase.TicketDetail) ticketDetailJSON {
 		PriorityScore:   detail.Ticket.PriorityScore,
 		CreatedAt:       detail.Ticket.CreatedAt,
 		CloseComment:    detail.Ticket.CloseComment,
+		WorkNotes:       notes,
 		SeverityChanges: changes,
 	}
 	if !detail.Ticket.ClaimedAt.IsZero() {
@@ -197,6 +247,24 @@ func toTicketDetailJSON(detail usecase.TicketDetail) ticketDetailJSON {
 		body.ClosedAt = &closedAt
 	}
 	return body
+}
+
+func writeWorkNoteError(c echo.Context, err error) error {
+	switch {
+	case errors.Is(err, entity.ErrUnauthenticated):
+		return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})
+	case errors.Is(err, entity.ErrWorkNoteRole),
+		errors.Is(err, entity.ErrWorkNoteAgent):
+		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
+	case errors.Is(err, entity.ErrTicketNotFound):
+		return c.JSON(http.StatusNotFound, messageJSON{Message: err.Error()})
+	case errors.Is(err, entity.ErrWorkNoteClosed):
+		return c.JSON(http.StatusConflict, messageJSON{Message: err.Error()})
+	case errors.Is(err, entity.ErrInvalidWorkNote):
+		return c.JSON(http.StatusBadRequest, messageJSON{Message: err.Error()})
+	default:
+		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "対応メモを保存できませんでした。しばらくしてから、もう一度試してください"})
+	}
 }
 
 func writeShowTicketError(c echo.Context, err error) error {

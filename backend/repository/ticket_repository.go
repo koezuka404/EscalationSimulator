@@ -60,6 +60,21 @@ func MigrateSeverityHistories(db *gorm.DB) error {
 	return db.AutoMigrate(&severityHistoryRow{})
 }
 
+type workNoteRow struct {
+	ID        string `gorm:"primaryKey"`
+	TicketID  string `gorm:"index"`
+	UserID    string `gorm:"index"`
+	Body      string
+	Kind      string `gorm:"index"`
+	CreatedAt time.Time
+}
+
+func (workNoteRow) TableName() string { return "ticket_comments" }
+
+func MigrateWorkNotes(db *gorm.DB) error {
+	return db.AutoMigrate(&workNoteRow{})
+}
+
 //チケットを保存する
 func (r *ticketRepository) Save(ctx context.Context, ticket entity.Ticket) (entity.Ticket, error) {
 	if ticket.ID == "" {
@@ -313,6 +328,74 @@ func (r *ticketRepository) ListSeverityChanges(ctx context.Context, ticketID str
 		})
 	}
 	return changes, nil
+}
+
+//対応メモを保存する完了したチケットには書かない
+func (r *ticketRepository) AddWorkNote(ctx context.Context, ticketID, userID, body string, createdAt time.Time) (entity.WorkNote, error) {
+	var saved entity.WorkNote
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var row ticketRow
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&row, "id = ?", ticketID).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return entity.ErrTicketNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if row.Status == string(entity.TicketClosed) {
+			return entity.ErrWorkNoteClosed
+		}
+		note := workNoteRow{
+			ID:        uuid.NewString(),
+			TicketID:  ticketID,
+			UserID:    userID,
+			Body:      body,
+			Kind:      entity.WorkNoteKind,
+			CreatedAt: createdAt,
+		}
+		if err := tx.Create(&note).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&ticketRow{}).Where("id = ?", ticketID).Update("updated_at", createdAt).Error; err != nil {
+			return err
+		}
+		saved = entity.WorkNote{
+			ID:        note.ID,
+			TicketID:  note.TicketID,
+			UserID:    note.UserID,
+			Body:      note.Body,
+			CreatedAt: note.CreatedAt,
+		}
+		return nil
+	})
+	if err != nil {
+		return entity.WorkNote{}, err
+	}
+	return saved, nil
+}
+
+//対応メモを書いた順で返す
+func (r *ticketRepository) ListWorkNotes(ctx context.Context, ticketID string) ([]entity.WorkNote, error) {
+	var rows []workNoteRow
+	err := r.db.WithContext(ctx).
+		Where("ticket_id = ? AND kind = ?", ticketID, entity.WorkNoteKind).
+		Order("created_at ASC").
+		Order("id ASC").
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	notes := make([]entity.WorkNote, 0, len(rows))
+	for _, row := range rows {
+		notes = append(notes, entity.WorkNote{
+			ID:        row.ID,
+			TicketID:  row.TicketID,
+			UserID:    row.UserID,
+			Body:      row.Body,
+			CreatedAt: row.CreatedAt,
+		})
+	}
+	return notes, nil
 }
 
 //対応待ちのチケットを返す詳細の本文は読まない

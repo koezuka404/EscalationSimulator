@@ -17,11 +17,19 @@ type SeverityChange struct {
 	CreatedAt     time.Time
 }
 
+type WorkNote struct {
+	ID         string
+	Body       string
+	AuthorName string
+	CreatedAt  time.Time
+}
+
 type TicketDetail struct {
 	Ticket          entity.Ticket
 	CustomerName    string
 	Plan            entity.Plan
 	AssigneeName    string
+	WorkNotes       []WorkNote
 	SeverityChanges []SeverityChange
 }
 
@@ -36,7 +44,7 @@ func NewShowTicket(tickets repository.TicketRepository, customers repository.Cus
 	return &ShowTicket{tickets: tickets, customers: customers, users: users, current: current}
 }
 
-//見られる人に、チケットの詳細と緊急度の変更履歴を返す
+//見られる人に、チケットの詳細、対応メモ、緊急度の変更履歴を返す
 func (s *ShowTicket) Execute(ctx context.Context, authorization, ticketID string) (TicketDetail, error) {
 	actor, err := s.current.Execute(ctx, authorization)
 	if err != nil {
@@ -57,9 +65,22 @@ func (s *ShowTicket) Execute(ctx context.Context, authorization, ticketID string
 	if err != nil {
 		return TicketDetail{}, err
 	}
-	names, err := s.users.ListNames(ctx, detailNameIDs(ticket.AssigneeID, changes))
+	notes, err := s.tickets.ListWorkNotes(ctx, ticket.ID)
 	if err != nil {
 		return TicketDetail{}, err
+	}
+	names, err := s.users.ListNames(ctx, detailNameIDs(ticket.AssigneeID, changes, notes))
+	if err != nil {
+		return TicketDetail{}, err
+	}
+	shownNotes := make([]WorkNote, 0, len(notes))
+	for _, note := range notes {
+		shownNotes = append(shownNotes, WorkNote{
+			ID:         note.ID,
+			Body:       note.Body,
+			AuthorName: names[note.UserID],
+			CreatedAt:  note.CreatedAt,
+		})
 	}
 	shown := make([]SeverityChange, 0, len(changes))
 	for _, change := range changes {
@@ -76,16 +97,27 @@ func (s *ShowTicket) Execute(ctx context.Context, authorization, ticketID string
 		CustomerName:    customer.Name,
 		Plan:            customer.Plan,
 		AssigneeName:    names[ticket.AssigneeID],
+		WorkNotes:       shownNotes,
 		SeverityChanges: shown,
 	}, nil
 }
 
-func detailNameIDs(assigneeID string, changes []entity.SeverityChange) []string {
-	seen := make(map[string]struct{}, len(changes)+1)
-	ids := make([]string, 0, len(changes)+1)
+func detailNameIDs(assigneeID string, changes []entity.SeverityChange, notes []entity.WorkNote) []string {
+	seen := make(map[string]struct{}, len(changes)+len(notes)+1)
+	ids := make([]string, 0, len(changes)+len(notes)+1)
 	if assigneeID != "" {
 		seen[assigneeID] = struct{}{}
 		ids = append(ids, assigneeID)
+	}
+	for _, note := range notes {
+		if note.UserID == "" {
+			continue
+		}
+		if _, ok := seen[note.UserID]; ok {
+			continue
+		}
+		seen[note.UserID] = struct{}{}
+		ids = append(ids, note.UserID)
 	}
 	for _, change := range changes {
 		if change.ChangedBy == "" {

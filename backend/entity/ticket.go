@@ -50,7 +50,21 @@ var (
 	ErrReleaseForbidden      = errors.New("担当を外せるのは管理者だけです")
 	ErrMyTicketsForbidden    = errors.New("自分のチケットを見られるのは申請者だけです")
 	ErrTicketHidden          = errors.New("このチケットを見られるのは、担当した人と管理者だけです")
+	ErrInvalidWorkNote       = errors.New("対応メモは1文字以上、5000文字以内で入力してください")
+	ErrWorkNoteRole          = errors.New("対応メモを書けるのは担当者と管理者だけです")
+	ErrWorkNoteAgent         = errors.New("対応メモを書けるのは、自分の対応中のチケットだけです")
+	ErrWorkNoteClosed        = errors.New("完了したチケットには対応メモを書けません")
 )
+
+const WorkNoteKind = "work_note"
+
+type WorkNote struct {
+	ID        string
+	TicketID  string
+	UserID    string
+	Body      string
+	CreatedAt time.Time
+}
 
 type SeverityChange struct {
 	FromSeverity int
@@ -115,6 +129,32 @@ func SeverityReason(reason string) (string, error) {
 		return "", ErrInvalidSeverityReason
 	}
 	return reason, nil
+}
+
+//対応メモの文字数を確かめる
+func WorkNoteText(body string) (string, error) {
+	body = strings.TrimSpace(body)
+	if utf8.RuneCountInString(body) < 1 || utf8.RuneCountInString(body) > 5000 {
+		return "", ErrInvalidWorkNote
+	}
+	return body, nil
+}
+
+//対応メモを書いてよいかを確かめる
+func CanAddWorkNote(role Role, actorID string, ticket Ticket) error {
+	if role == RoleAdmin {
+		if ticket.Status == TicketClosed {
+			return ErrWorkNoteClosed
+		}
+		return nil
+	}
+	if role == RoleAgent {
+		if ticket.Status != TicketInProgress || ticket.AssigneeID != actorID {
+			return ErrWorkNoteAgent
+		}
+		return nil
+	}
+	return ErrWorkNoteRole
 }
 
 //チケットの詳細を見られるか確かめる
