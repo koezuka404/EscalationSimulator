@@ -140,6 +140,55 @@ func (r *ticketRepository) Close(ctx context.Context, id, comment string, closed
 	return closed, nil
 }
 
+//対応中を待ちに戻し、担当者を待機中にする
+func (r *ticketRepository) Release(ctx context.Context, id string, planScore, slaMinutes int, now time.Time) (entity.Ticket, error) {
+	var released entity.Ticket
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var row ticketRow
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&row, "id = ?", id).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return entity.ErrTicketNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if row.Status != string(entity.TicketInProgress) {
+			return entity.ErrNotInProgress
+		}
+		score, err := entity.PriorityScore(row.Severity, planScore, row.CreatedAt, now, slaMinutes, false)
+		if err != nil {
+			return err
+		}
+		result := tx.Model(&ticketRow{}).Where("id = ? AND status = ?", id, string(entity.TicketInProgress)).Updates(map[string]any{
+			"status":         string(entity.TicketOpen),
+			"assignee_id":    "",
+			"claimed_at":     nil,
+			"priority_score": score,
+			"updated_at":     now,
+		})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return entity.ErrNotInProgress
+		}
+		if row.AssigneeID != "" {
+			if err := setAgentAvailable(tx, row.AssigneeID); err != nil {
+				return err
+			}
+		}
+		if err := tx.First(&row, "id = ?", id).Error; err != nil {
+			return err
+		}
+		released = toTicket(row)
+		return nil
+	})
+	if err != nil {
+		return entity.Ticket{}, err
+	}
+	return released, nil
+}
+
 func setAgentAvailable(tx *gorm.DB, agentID string) error {
 	result := tx.Model(&agentStatusRow{}).Where("user_id = ?", agentID).Update("status", string(entity.AgentAvailable))
 	if result.Error != nil {

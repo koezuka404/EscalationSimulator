@@ -15,10 +15,11 @@ type TicketAPI struct {
 	create   *usecase.CreateTicket
 	close    *usecase.CloseTicket
 	severity *usecase.ChangeSeverity
+	release  *usecase.ReturnTicketToQueue
 }
 
-func NewTicketAPI(create *usecase.CreateTicket, close *usecase.CloseTicket, severity *usecase.ChangeSeverity) *TicketAPI {
-	return &TicketAPI{create: create, close: close, severity: severity}
+func NewTicketAPI(create *usecase.CreateTicket, close *usecase.CloseTicket, severity *usecase.ChangeSeverity, release *usecase.ReturnTicketToQueue) *TicketAPI {
+	return &TicketAPI{create: create, close: close, severity: severity, release: release}
 }
 
 //チケットの起票を受ける
@@ -63,6 +64,15 @@ func (a *TicketAPI) Escalate(c echo.Context) error {
 	ticket, err := a.severity.Execute(c.Request().Context(), c.Request().Header.Get("Authorization"), c.Param("id"), body.Reason, body.Severity)
 	if err != nil {
 		return writeChangeSeverityError(c, err)
+	}
+	return c.JSON(http.StatusOK, toTicketJSON(ticket))
+}
+
+//担当を外して待ちに戻す依頼を受ける
+func (a *TicketAPI) Release(c echo.Context) error {
+	ticket, err := a.release.Execute(c.Request().Context(), c.Request().Header.Get("Authorization"), c.Param("id"))
+	if err != nil {
+		return writeReleaseError(c, err)
 	}
 	return c.JSON(http.StatusOK, toTicketJSON(ticket))
 }
@@ -182,5 +192,21 @@ func writeChangeSeverityError(c echo.Context, err error) error {
 		return c.JSON(http.StatusBadRequest, messageJSON{Message: err.Error()})
 	default:
 		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "緊急度を変更できませんでした。しばらくしてから、もう一度試してください"})
+	}
+}
+
+func writeReleaseError(c echo.Context, err error) error {
+	switch {
+	case errors.Is(err, entity.ErrUnauthenticated):
+		return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})
+	case errors.Is(err, entity.ErrReleaseForbidden):
+		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
+	case errors.Is(err, entity.ErrTicketNotFound),
+		errors.Is(err, entity.ErrCustomerNotFound):
+		return c.JSON(http.StatusNotFound, messageJSON{Message: err.Error()})
+	case errors.Is(err, entity.ErrNotInProgress):
+		return c.JSON(http.StatusConflict, messageJSON{Message: err.Error()})
+	default:
+		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "チケットを待ちに戻せませんでした。しばらくしてから、もう一度試してください"})
 	}
 }

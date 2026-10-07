@@ -19,6 +19,7 @@ func Tickets(e *echo.Echo, api *controller.TicketAPI) {
 	e.POST("/api/tickets", api.Create)
 	e.POST("/api/tickets/:id/close", api.Close)
 	e.POST("/api/tickets/:id/escalate", api.Escalate)
+	e.POST("/api/tickets/:id/release", api.Release)
 }
 
 func Queue(e *echo.Echo, api *controller.QueueAPI) {
