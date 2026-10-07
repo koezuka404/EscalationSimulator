@@ -56,6 +56,33 @@ func (r *userRepository) Save(ctx context.Context, user entity.User) (entity.Use
 	return userFromRow(row), nil
 }
 
+//担当者を保存し、稼働を待機中で作る
+func (r *userRepository) SaveAgent(ctx context.Context, user entity.User) (entity.User, error) {
+	if user.ID == "" {
+		user.ID = uuid.NewString()
+	}
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		row := userToRow(user)
+		if err := tx.Create(&row).Error; err != nil {
+			return err
+		}
+		status := agentStatusRow{
+			UserID:    user.ID,
+			Status:    string(entity.AgentAvailable),
+			UpdatedAt: time.Now(),
+		}
+		return tx.Create(&status).Error
+	})
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return entity.User{}, entity.ErrEmailTaken
+		}
+		return entity.User{}, err
+	}
+	return user, nil
+}
+
 func (r *userRepository) FindByID(ctx context.Context, id string) (entity.User, error) {
 	var row userRow
 	err := r.db.WithContext(ctx).First(&row, "id = ?", id).Error

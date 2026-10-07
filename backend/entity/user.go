@@ -74,6 +74,28 @@ func NewApplicant(name, email, password string) (User, error) {
 	}, nil
 }
 
+//担当者を作る所属顧客は空
+func NewAgent(name, email, password string) (User, error) {
+	name = strings.TrimSpace(name)
+	email = strings.ToLower(strings.TrimSpace(email))
+	if utf8.RuneCountInString(name) < 1 || utf8.RuneCountInString(name) > 50 {
+		return User{}, ErrInvalidUserName
+	}
+	if err := validateEmail(email); err != nil {
+		return User{}, err
+	}
+	if err := validatePassword(password); err != nil {
+		return User{}, err
+	}
+	return User{
+		Email:       email,
+		Name:        name,
+		Role:        RoleAgent,
+		Status:      StatusActive,
+		AuthVersion: 1,
+	}, nil
+}
+
 func validateEmail(email string) error {
 	parsed, err := mail.ParseAddress(email)
 	if err != nil || parsed.Address != email || utf8.RuneCountInString(email) > 254 {

@@ -16,6 +16,7 @@ type CustomerRepository interface {
 
 type UserRepository interface {
 	Save(ctx context.Context, user entity.User) (entity.User, error)
+	SaveAgent(ctx context.Context, user entity.User) (entity.User, error)
 	FindByID(ctx context.Context, id string) (entity.User, error)
 	FindByEmail(ctx context.Context, email string) (entity.User, error)
 	UpdateLoginState(ctx context.Context, user entity.User) error

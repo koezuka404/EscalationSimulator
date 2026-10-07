@@ -12,6 +12,7 @@ func Customers(e *echo.Echo, api *controller.CustomerAPI) {
 }
 
 func Users(e *echo.Echo, api *controller.UserAPI) {
+	e.POST("/api/users", api.CreateAgent)
 	e.PATCH("/api/users/:id", api.LinkCustomer)
 }
 

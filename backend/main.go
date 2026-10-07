@@ -66,7 +66,10 @@ func main() {
 	router.Customers(e, controller.NewCustomerAPI(usecase.NewCustomers(customers)))
 	current := usecase.NewCurrentUser(users, []byte(cfg.JWTSecret), cfg.JWTIssuer, cfg.JWTAudience)
 	router.Me(e, controller.NewMeAPI(current))
-	router.Users(e, controller.NewUserAPI(usecase.NewLinkApplicant(users, customers, current)))
+	router.Users(e, controller.NewUserAPI(
+		usecase.NewLinkApplicant(users, customers, current),
+		usecase.NewCreateAgent(users, current, cfg.BcryptCost),
+	))
 	tickets := repository.NewTicketRepository(conn)
 	router.Tickets(e, controller.NewTicketAPI(
 		usecase.NewCreateTicket(tickets, customers, current, order),
