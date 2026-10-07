@@ -21,6 +21,7 @@ type UserRepository interface {
 	UpdateLoginState(ctx context.Context, user entity.User) error
 	UpdateCustomer(ctx context.Context, user entity.User) error
 	BumpAuthVersion(ctx context.Context, id string) error
+	ListNames(ctx context.Context, ids []string) (map[string]string, error)
 }
 
 type SessionRepository interface {
@@ -33,6 +34,7 @@ type TicketRepository interface {
 	Save(ctx context.Context, ticket entity.Ticket) (entity.Ticket, error)
 	FindByID(ctx context.Context, id string) (entity.Ticket, error)
 	ListOpen(ctx context.Context) ([]entity.Ticket, error)
+	ListByCreator(ctx context.Context, createdBy string) ([]entity.Ticket, error)
 	Close(ctx context.Context, id, comment string, closedAt time.Time) (entity.Ticket, error)
 	UpdateSeverity(ctx context.Context, id string, severity, planScore, slaMinutes int, reason, changedBy string, now time.Time) (entity.Ticket, error)
 	UpdateOpenScore(ctx context.Context, id string, score int, now time.Time) (bool, error)

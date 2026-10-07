@@ -272,6 +272,25 @@ func (r *ticketRepository) UpdateOpenScore(ctx context.Context, id string, score
 	return result.RowsAffected > 0, nil
 }
 
+//申請者が起票したチケットを、更新が新しい順で返す詳細の本文は読まない
+func (r *ticketRepository) ListByCreator(ctx context.Context, createdBy string) ([]entity.Ticket, error) {
+	var rows []ticketRow
+	err := r.db.WithContext(ctx).
+		Select("id", "customer_id", "created_by", "title", "severity", "category", "status", "assignee_id", "priority_score", "created_at").
+		Where("created_by = ?", createdBy).
+		Order("updated_at DESC").
+		Order("id DESC").
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	tickets := make([]entity.Ticket, 0, len(rows))
+	for _, row := range rows {
+		tickets = append(tickets, toTicket(row))
+	}
+	return tickets, nil
+}
+
 //対応待ちのチケットを返す詳細の本文は読まない
 func (r *ticketRepository) ListOpen(ctx context.Context) ([]entity.Ticket, error) {
 	var rows []ticketRow

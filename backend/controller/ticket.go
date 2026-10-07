@@ -16,10 +16,24 @@ type TicketAPI struct {
 	close    *usecase.CloseTicket
 	severity *usecase.ChangeSeverity
 	release  *usecase.ReturnTicketToQueue
+	mine     *usecase.ListMyTickets
 }
 
-func NewTicketAPI(create *usecase.CreateTicket, close *usecase.CloseTicket, severity *usecase.ChangeSeverity, release *usecase.ReturnTicketToQueue) *TicketAPI {
-	return &TicketAPI{create: create, close: close, severity: severity, release: release}
+func NewTicketAPI(create *usecase.CreateTicket, close *usecase.CloseTicket, severity *usecase.ChangeSeverity, release *usecase.ReturnTicketToQueue, mine *usecase.ListMyTickets) *TicketAPI {
+	return &TicketAPI{create: create, close: close, severity: severity, release: release, mine: mine}
+}
+
+//申請者の自分のチケット一覧を返す
+func (a *TicketAPI) ListMine(c echo.Context) error {
+	tickets, err := a.mine.Execute(c.Request().Context(), c.Request().Header.Get("Authorization"))
+	if err != nil {
+		return writeMyTicketsError(c, err)
+	}
+	body := make([]myTicketJSON, 0, len(tickets))
+	for _, ticket := range tickets {
+		body = append(body, toMyTicketJSON(ticket))
+	}
+	return c.JSON(http.StatusOK, body)
 }
 
 //チケットの起票を受ける
@@ -80,6 +94,43 @@ func (a *TicketAPI) Release(c echo.Context) error {
 type changeSeverityJSON struct {
 	Severity int    `json:"severity"`
 	Reason   string `json:"reason"`
+}
+
+type myTicketJSON struct {
+	ID               string    `json:"id"`
+	Title            string    `json:"title"`
+	Severity         int       `json:"severity"`
+	Status           string    `json:"status"`
+	CreatedAt        time.Time `json:"created_at"`
+	RemainingMinutes int       `json:"remaining_minutes"`
+	Overdue          bool      `json:"overdue"`
+	OverdueMinutes   int       `json:"overdue_minutes"`
+	AssigneeName     string    `json:"assignee_name"`
+}
+
+func toMyTicketJSON(ticket usecase.MyTicket) myTicketJSON {
+	return myTicketJSON{
+		ID:               ticket.ID,
+		Title:            ticket.Title,
+		Severity:         ticket.Severity,
+		Status:           string(ticket.Status),
+		CreatedAt:        ticket.CreatedAt,
+		RemainingMinutes: ticket.RemainingMinutes,
+		Overdue:          ticket.Overdue,
+		OverdueMinutes:   ticket.OverdueMinutes,
+		AssigneeName:     ticket.AssigneeName,
+	}
+}
+
+func writeMyTicketsError(c echo.Context, err error) error {
+	switch {
+	case errors.Is(err, entity.ErrUnauthenticated):
+		return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})
+	case errors.Is(err, entity.ErrMyTicketsForbidden):
+		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
+	default:
+		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "チケットの一覧を返せませんでした。しばらくしてから、もう一度試してください"})
+	}
 }
 
 type closeTicketJSON struct {

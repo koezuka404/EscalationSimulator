@@ -107,6 +107,23 @@ func (r *userRepository) UpdateCustomer(ctx context.Context, user entity.User) e
 	return nil
 }
 
+//利用者IDから名前を返す
+func (r *userRepository) ListNames(ctx context.Context, ids []string) (map[string]string, error) {
+	names := make(map[string]string, len(ids))
+	if len(ids) == 0 {
+		return names, nil
+	}
+	var rows []userRow
+	err := r.db.WithContext(ctx).Select("id", "name").Where("id IN ?", ids).Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		names[row.ID] = row.Name
+	}
+	return names, nil
+}
+
 func (r *userRepository) BumpAuthVersion(ctx context.Context, id string) error {
 	return r.db.WithContext(ctx).Model(&userRow{}).Where("id = ?", id).Update("auth_version", gorm.Expr("auth_version + 1")).Error
 }

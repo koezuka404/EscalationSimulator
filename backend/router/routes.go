@@ -16,6 +16,7 @@ func Users(e *echo.Echo, api *controller.UserAPI) {
 }
 
 func Tickets(e *echo.Echo, api *controller.TicketAPI) {
+	e.GET("/api/tickets", api.ListMine)
 	e.POST("/api/tickets", api.Create)
 	e.POST("/api/tickets/:id/close", api.Close)
 	e.POST("/api/tickets/:id/escalate", api.Escalate)

@@ -48,6 +48,7 @@ var (
 	ErrSeverityLower         = errors.New("緊急度を下げられるのは管理者だけです")
 	ErrSeverityRaise         = errors.New("緊急度を上げられるのは、自分の対応中のチケットだけです")
 	ErrReleaseForbidden      = errors.New("担当を外せるのは管理者だけです")
+	ErrMyTicketsForbidden    = errors.New("自分のチケットを見られるのは申請者だけです")
 )
 
 type Ticket struct {
