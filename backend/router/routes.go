@@ -31,6 +31,10 @@ func Agent(e *echo.Echo, api *controller.AgentAPI) {
 	e.PATCH("/api/agent/status", api.Update)
 }
 
+func Dashboard(e *echo.Echo, api *controller.DashboardAPI) {
+	e.GET("/api/admin/dashboard", api.Show)
+}
+
 func Live(e *echo.Echo, hub *websocket.Hub) {
 	e.GET("/ws", hub.Serve)
 }

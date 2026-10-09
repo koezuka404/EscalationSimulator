@@ -32,12 +32,13 @@ type Hub struct {
 	broadcast  chan usecase.Message
 	current    *usecase.CurrentUser
 	snapshot   *usecase.QueueSnapshot
+	dashboard  *usecase.ShowDashboard
 	upgrader   websocket.Upgrader
 	mu         sync.Mutex
 	goneSince  map[string]time.Time
 }
 
-func NewHub(current *usecase.CurrentUser, snapshot *usecase.QueueSnapshot, origin string) *Hub {
+func NewHub(current *usecase.CurrentUser, snapshot *usecase.QueueSnapshot, dashboard *usecase.ShowDashboard, origin string) *Hub {
 	hub := &Hub{
 		clients:    make(map[*client]struct{}),
 		register:   make(chan *client),
@@ -45,6 +46,7 @@ func NewHub(current *usecase.CurrentUser, snapshot *usecase.QueueSnapshot, origi
 		broadcast:  make(chan usecase.Message, 32),
 		current:    current,
 		snapshot:   snapshot,
+		dashboard:  dashboard,
 		goneSince:  make(map[string]time.Time),
 	}
 	hub.upgrader = websocket.Upgrader{
@@ -156,6 +158,9 @@ func (h *Hub) ForgetGone(userID string) {
 }
 
 func (c *client) wants(message usecase.Message) bool {
+	if message.Admins && c.role == entity.RoleAdmin {
+		return true
+	}
 	if message.Staff && (c.role == entity.RoleAgent || c.role == entity.RoleAdmin) {
 		return true
 	}
@@ -189,6 +194,13 @@ func (h *Hub) Serve(c echo.Context) error {
 	if actor.Role == entity.RoleAgent || actor.Role == entity.RoleAdmin {
 		if err := h.writeSnapshot(c.Request().Context(), conn); err != nil {
 			log.Printf("画面への最初の待ち順を送れませんでした: %v", err)
+			conn.Close()
+			return nil
+		}
+	}
+	if actor.Role == entity.RoleAdmin {
+		if err := h.writeDashboard(c.Request().Context(), conn); err != nil {
+			log.Printf("画面への最初の現場の数字を送れませんでした: %v", err)
 			conn.Close()
 			return nil
 		}
@@ -238,6 +250,22 @@ func (h *Hub) writeSnapshot(ctx context.Context, conn *websocket.Conn) error {
 		agents = append(agents, snapshotAgent{UserID: agent.UserID, Name: agent.Name, Status: agent.Status})
 	}
 	body, err := json.Marshal(snapshotEvent{Type: "queue_snapshot", Tickets: tickets, Agents: agents})
+	if err != nil {
+		return err
+	}
+	if err := conn.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil {
+		return err
+	}
+	return conn.WriteMessage(websocket.TextMessage, body)
+}
+
+func (h *Hub) writeDashboard(ctx context.Context, conn *websocket.Conn) error {
+	numbers, err := h.dashboard.Collect(ctx)
+	if err != nil {
+		log.Printf("画面への最初の現場の数字を用意できませんでした: %v", err)
+		return nil
+	}
+	body, err := json.Marshal(usecase.DashboardMessage(numbers))
 	if err != nil {
 		return err
 	}

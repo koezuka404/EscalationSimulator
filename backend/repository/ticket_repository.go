@@ -13,22 +13,24 @@ import (
 )
 
 type ticketRow struct {
-	ID            string `gorm:"primaryKey"`
-	CustomerID    string `gorm:"index"`
-	CreatedBy     string `gorm:"index"`
-	Title         string
-	Description   string
-	Severity      int
-	Category      string
-	Status        string `gorm:"index"`
-	AssigneeID    string
-	PriorityScore int
-	CreatedAt     time.Time
-	ClaimedAt     *time.Time
-	ClosedAt      *time.Time
-	CloseComment  string
-	SlaNotifiedAt *time.Time
-	UpdatedAt     time.Time
+	ID               string `gorm:"primaryKey"`
+	CustomerID       string `gorm:"index"`
+	CreatedBy        string `gorm:"index"`
+	Title            string
+	Description      string
+	Severity         int
+	Category         string
+	Status           string `gorm:"index"`
+	AssigneeID       string
+	PriorityScore    int
+	CreatedAt        time.Time
+	ClaimedAt        *time.Time
+	FirstClaimedAt   *time.Time
+	OverdueClaimedAt *time.Time
+	ClosedAt         *time.Time
+	CloseComment     string
+	SlaNotifiedAt    *time.Time
+	UpdatedAt        time.Time
 }
 
 func (ticketRow) TableName() string { return "tickets" }
@@ -42,7 +44,10 @@ func NewTicketRepository(db *gorm.DB) TicketRepository {
 }
 
 func MigrateTickets(db *gorm.DB) error {
-	return db.AutoMigrate(&ticketRow{})
+	if err := db.AutoMigrate(&ticketRow{}); err != nil {
+		return err
+	}
+	return db.Exec("UPDATE tickets SET first_claimed_at = claimed_at WHERE first_claimed_at IS NULL AND claimed_at IS NOT NULL").Error
 }
 
 type severityHistoryRow struct {
@@ -427,6 +432,29 @@ func (r *ticketRepository) ListOpen(ctx context.Context) ([]entity.Ticket, error
 	return tickets, nil
 }
 
+//現場の数字に使うチケットを返す詳細の本文は読まない
+func (r *ticketRepository) ListForDashboard(ctx context.Context, since time.Time) ([]entity.Ticket, error) {
+	var rows []ticketRow
+	err := r.db.WithContext(ctx).
+		Select("customer_id", "status", "created_at", "claimed_at", "first_claimed_at", "closed_at", "overdue_claimed_at").
+		Where(
+			"status IN ? OR closed_at >= ? OR first_claimed_at >= ? OR overdue_claimed_at >= ?",
+			[]string{string(entity.TicketOpen), string(entity.TicketInProgress)},
+			since,
+			since,
+			since,
+		).
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	tickets := make([]entity.Ticket, 0, len(rows))
+	for _, row := range rows {
+		tickets = append(tickets, toTicket(row))
+	}
+	return tickets, nil
+}
+
 func toTicket(row ticketRow) entity.Ticket {
 	ticket := entity.Ticket{
 		ID:            row.ID,
@@ -444,6 +472,12 @@ func toTicket(row ticketRow) entity.Ticket {
 	}
 	if row.ClaimedAt != nil {
 		ticket.ClaimedAt = *row.ClaimedAt
+	}
+	if row.FirstClaimedAt != nil {
+		ticket.FirstClaimedAt = *row.FirstClaimedAt
+	}
+	if row.OverdueClaimedAt != nil {
+		ticket.OverdueClaimedAt = *row.OverdueClaimedAt
 	}
 	if row.ClosedAt != nil {
 		ticket.ClosedAt = *row.ClosedAt

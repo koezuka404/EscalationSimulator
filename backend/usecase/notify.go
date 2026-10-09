@@ -9,6 +9,7 @@ import (
 
 type Message struct {
 	Staff       bool
+	Admins      bool
 	ApplicantID string
 	Body        []byte
 }
@@ -27,6 +28,18 @@ func publish(notices Notifier, staff bool, applicantID string, payload any) {
 		return
 	}
 	notices.Send(Message{Staff: staff, ApplicantID: applicantID, Body: body})
+}
+
+func publishAdmins(notices Notifier, payload any) {
+	if notices == nil {
+		return
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("画面への知らせを作れませんでした: %v", err)
+		return
+	}
+	notices.Send(Message{Admins: true, Body: body})
 }
 
 func ticketView(ticket entity.Ticket, customerName, plan string) map[string]any {

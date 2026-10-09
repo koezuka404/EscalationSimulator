@@ -85,6 +85,14 @@ func (r *claimRepository) ClaimNext(ctx context.Context, agentID string, queue T
 				putTicketBack(ctx, queue, id, score)
 				return err
 			}
+			if err := stampClaimTimes(tx, row, now); err != nil {
+				putTicketBack(ctx, queue, id, score)
+				return err
+			}
+			if err := tx.First(&row, "id = ?", id).Error; err != nil {
+				putTicketBack(ctx, queue, id, score)
+				return err
+			}
 			claimed = toTicket(row)
 			return nil
 		}
@@ -94,6 +102,26 @@ func (r *claimRepository) ClaimNext(ctx context.Context, agentID string, queue T
 		return entity.Ticket{}, err
 	}
 	return claimed, nil
+}
+
+//初めて担当が付いた時刻を残し、その時点で約束時間を過ぎていれば印を付ける
+func stampClaimTimes(tx *gorm.DB, row ticketRow, now time.Time) error {
+	updates := map[string]any{}
+	if row.FirstClaimedAt == nil {
+		updates["first_claimed_at"] = now
+	}
+	var customer customerRow
+	err := tx.Select("sla_minutes").First(&customer, "id = ?", row.CustomerID).Error
+	if err == nil {
+		_, _, _, overdue := entity.SLAProgress(row.CreatedAt, now, customer.SLAMinutes, false)
+		if overdue {
+			updates["overdue_claimed_at"] = now
+		}
+	}
+	if len(updates) == 0 {
+		return nil
+	}
+	return tx.Model(&ticketRow{}).Where("id = ?", row.ID).Updates(updates).Error
 }
 
 func ensureAgentAvailable(tx *gorm.DB, agentID string) error {

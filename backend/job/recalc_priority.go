@@ -15,14 +15,19 @@ type RecalcLock interface {
 	Unlock(ctx context.Context, key, token string) error
 }
 
-type RecalcPriority struct {
-	recalc *usecase.RecalcOpenScores
-	locks  RecalcLock
-	every  time.Duration
+type DashboardSummary interface {
+	Publish(ctx context.Context)
 }
 
-func NewRecalcPriority(recalc *usecase.RecalcOpenScores, locks RecalcLock, every time.Duration) *RecalcPriority {
-	return &RecalcPriority{recalc: recalc, locks: locks, every: every}
+type RecalcPriority struct {
+	recalc    *usecase.RecalcOpenScores
+	dashboard DashboardSummary
+	locks     RecalcLock
+	every     time.Duration
+}
+
+func NewRecalcPriority(recalc *usecase.RecalcOpenScores, dashboard DashboardSummary, locks RecalcLock, every time.Duration) *RecalcPriority {
+	return &RecalcPriority{recalc: recalc, dashboard: dashboard, locks: locks, every: every}
 }
 
 //起動時と一定間隔で、対応待ちの点数をやり直す
@@ -40,7 +45,7 @@ func (j *RecalcPriority) Run(ctx context.Context) {
 	}
 }
 
-//他で実行中なら飛ばし、対応待ちの点数をやり直す
+//他で実行中なら飛ばし、対応待ちの点数をやり直し、現場の数字をまとめる
 func (j *RecalcPriority) runOnce(ctx context.Context) {
 	if ctx.Err() != nil {
 		return
@@ -62,5 +67,8 @@ func (j *RecalcPriority) runOnce(ctx context.Context) {
 	}()
 	if err := j.recalc.Execute(ctx); err != nil {
 		log.Printf("対応待ちの点数をやり直せませんでした: %v", err)
+	}
+	if j.dashboard != nil {
+		j.dashboard.Publish(ctx)
 	}
 }

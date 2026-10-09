@@ -75,21 +75,23 @@ type SeverityChange struct {
 }
 
 type Ticket struct {
-	ID            string
-	CustomerID    string
-	CreatedBy     string
-	Title         string
-	Description   string
-	Severity      int
-	Category      Category
-	Status        TicketStatus
-	AssigneeID    string
-	PriorityScore int
-	CreatedAt     time.Time
-	ClaimedAt     time.Time
-	ClosedAt      time.Time
-	CloseComment  string
-	SlaNotifiedAt time.Time
+	ID               string
+	CustomerID       string
+	CreatedBy        string
+	Title            string
+	Description      string
+	Severity         int
+	Category         Category
+	Status           TicketStatus
+	AssigneeID       string
+	PriorityScore    int
+	CreatedAt        time.Time
+	ClaimedAt        time.Time
+	FirstClaimedAt   time.Time
+	OverdueClaimedAt time.Time
+	ClosedAt         time.Time
+	CloseComment     string
+	SlaNotifiedAt    time.Time
 }
 
 //件名、詳細、種類、緊急度を確かめて、対応待ちのチケットを作る

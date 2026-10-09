@@ -35,6 +35,7 @@ type TicketRepository interface {
 	Save(ctx context.Context, ticket entity.Ticket) (entity.Ticket, error)
 	FindByID(ctx context.Context, id string) (entity.Ticket, error)
 	ListOpen(ctx context.Context) ([]entity.Ticket, error)
+	ListForDashboard(ctx context.Context, since time.Time) ([]entity.Ticket, error)
 	ListByCreator(ctx context.Context, createdBy string) ([]entity.Ticket, error)
 	ListSeverityChanges(ctx context.Context, ticketID string) ([]entity.SeverityChange, error)
 	AddWorkNote(ctx context.Context, ticketID, userID, body string, createdAt time.Time) (entity.WorkNote, error)

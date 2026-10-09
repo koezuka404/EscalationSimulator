@@ -74,9 +74,12 @@ func main() {
 	))
 	tickets := repository.NewTicketRepository(conn)
 	statuses := repository.NewAgentStatusRepository(conn)
-	notices := websocket.NewHub(current, usecase.NewQueueSnapshot(tickets, customers, users, statuses), cfg.CORSAllowedOrigin)
+	dashboard := usecase.NewShowDashboard(tickets, customers, statuses, current)
+	notices := websocket.NewHub(current, usecase.NewQueueSnapshot(tickets, customers, users, statuses), dashboard, cfg.CORSAllowedOrigin)
+	dashboard.SetNotifier(notices)
 	go notices.Run()
 	router.Live(e, notices)
+	router.Dashboard(e, controller.NewDashboardAPI(dashboard))
 	router.Tickets(e, controller.NewTicketAPI(
 		usecase.NewCreateTicket(tickets, customers, current, order, notices),
 		usecase.NewCloseTicket(tickets, order, current, notices),
@@ -95,6 +98,7 @@ func main() {
 	defer stopJob()
 	go job.NewRecalcPriority(
 		usecase.NewRecalcOpenScores(tickets, customers, order, notices),
+		dashboard,
 		order,
 		cfg.PriorityRecalc,
 	).Run(jobCtx)
