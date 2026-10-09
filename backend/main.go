@@ -80,6 +80,7 @@ func main() {
 	go notices.Run()
 	router.Live(e, notices)
 	router.Dashboard(e, controller.NewDashboardAPI(dashboard))
+	router.AdminTickets(e, controller.NewAdminTicketAPI(usecase.NewSearchTickets(tickets, customers, users, current)))
 	router.Tickets(e, controller.NewTicketAPI(
 		usecase.NewCreateTicket(tickets, customers, current, order, notices),
 		usecase.NewCloseTicket(tickets, order, current, notices),

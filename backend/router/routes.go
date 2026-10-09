@@ -31,6 +31,10 @@ func Agent(e *echo.Echo, api *controller.AgentAPI) {
 	e.PATCH("/api/agent/status", api.Update)
 }
 
+func AdminTickets(e *echo.Echo, api *controller.AdminTicketAPI) {
+	e.GET("/api/admin/tickets", api.Search)
+}
+
 func Dashboard(e *echo.Echo, api *controller.DashboardAPI) {
 	e.GET("/api/admin/dashboard", api.Show)
 }

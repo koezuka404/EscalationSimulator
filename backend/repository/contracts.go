@@ -37,6 +37,7 @@ type TicketRepository interface {
 	ListOpen(ctx context.Context) ([]entity.Ticket, error)
 	ListForDashboard(ctx context.Context, since time.Time) ([]entity.Ticket, error)
 	ListByCreator(ctx context.Context, createdBy string) ([]entity.Ticket, error)
+	Search(ctx context.Context, filter TicketFilter) ([]entity.Ticket, error)
 	ListSeverityChanges(ctx context.Context, ticketID string) ([]entity.SeverityChange, error)
 	AddWorkNote(ctx context.Context, ticketID, userID, body string, createdAt time.Time) (entity.WorkNote, error)
 	ListWorkNotes(ctx context.Context, ticketID string) ([]entity.WorkNote, error)
@@ -45,6 +46,13 @@ type TicketRepository interface {
 	UpdateOpenScore(ctx context.Context, id string, score int, now time.Time) (bool, error)
 	MarkSLANotified(ctx context.Context, id string, at time.Time) (bool, error)
 	Release(ctx context.Context, id string, planScore, slaMinutes int, now time.Time) (entity.Ticket, error)
+}
+
+type TicketFilter struct {
+	Status     string
+	Severity   int
+	CustomerID string
+	AssigneeID string
 }
 
 type TicketQueue interface {

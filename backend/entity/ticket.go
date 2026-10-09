@@ -54,9 +54,20 @@ var (
 	ErrWorkNoteRole          = errors.New("対応メモを書けるのは担当者と管理者だけです")
 	ErrWorkNoteAgent         = errors.New("対応メモを書けるのは、自分の対応中のチケットだけです")
 	ErrWorkNoteClosed        = errors.New("完了したチケットには対応メモを書けません")
+	ErrInvalidTicketStatus   = errors.New("状態は対応待ち、対応中、完了のどれかを選んでください")
 )
 
 const WorkNoteKind = "work_note"
+
+//状態が対応待ち、対応中、完了のどれか確かめる
+func ParseTicketStatus(raw string) (TicketStatus, error) {
+	switch TicketStatus(raw) {
+	case TicketOpen, TicketInProgress, TicketClosed:
+		return TicketStatus(raw), nil
+	default:
+		return "", ErrInvalidTicketStatus
+	}
+}
 
 type WorkNote struct {
 	ID        string
