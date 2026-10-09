@@ -14,10 +14,11 @@ type ReturnTicketToQueue struct {
 	customers repository.CustomerRepository
 	queue     repository.TicketQueue
 	current   *CurrentUser
+	notices   Notifier
 }
 
-func NewReturnTicketToQueue(tickets repository.TicketRepository, customers repository.CustomerRepository, queue repository.TicketQueue, current *CurrentUser) *ReturnTicketToQueue {
-	return &ReturnTicketToQueue{tickets: tickets, customers: customers, queue: queue, current: current}
+func NewReturnTicketToQueue(tickets repository.TicketRepository, customers repository.CustomerRepository, queue repository.TicketQueue, current *CurrentUser, notices Notifier) *ReturnTicketToQueue {
+	return &ReturnTicketToQueue{tickets: tickets, customers: customers, queue: queue, current: current, notices: notices}
 }
 
 //管理者が担当を外し、対応中のチケットを待ちに戻す
@@ -54,5 +55,9 @@ func (r *ReturnTicketToQueue) Execute(ctx context.Context, authorization, ticket
 	if err := r.queue.Enqueue(enqueueCtx, released.ID, released.PriorityScore); err != nil {
 		log.Printf("待ち順に載せられませんでした。チケットは待ちに戻してあります。id=%s: %v", released.ID, err)
 	}
+	publish(r.notices, true, released.CreatedBy, map[string]any{
+		"type":   "ticket_returned",
+		"ticket": ticketView(released, customer.Name, string(customer.Plan)),
+	})
 	return released, nil
 }

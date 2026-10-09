@@ -13,10 +13,11 @@ type CloseTicket struct {
 	tickets repository.TicketRepository
 	queue   repository.TicketQueue
 	current *CurrentUser
+	notices Notifier
 }
 
-func NewCloseTicket(tickets repository.TicketRepository, queue repository.TicketQueue, current *CurrentUser) *CloseTicket {
-	return &CloseTicket{tickets: tickets, queue: queue, current: current}
+func NewCloseTicket(tickets repository.TicketRepository, queue repository.TicketQueue, current *CurrentUser, notices Notifier) *CloseTicket {
+	return &CloseTicket{tickets: tickets, queue: queue, current: current, notices: notices}
 }
 
 //対応中のチケットを完了にする
@@ -51,5 +52,10 @@ func (c *CloseTicket) Execute(ctx context.Context, authorization, ticketID, comm
 	if err := c.queue.Remove(removeCtx, closed.ID); err != nil {
 		log.Printf("待ち順から外せませんでした。チケットは完了しています。id=%s: %v", closed.ID, err)
 	}
+	publish(c.notices, true, closed.CreatedBy, map[string]any{
+		"type":      "ticket_closed",
+		"ticket_id": closed.ID,
+		"title":     closed.Title,
+	})
 	return closed, nil
 }

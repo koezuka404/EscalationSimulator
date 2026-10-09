@@ -94,6 +94,19 @@ func (r *agentStatusRepository) GoOffline(ctx context.Context, agentID string, n
 	return released, nil
 }
 
+//担当者の稼働を返す
+func (r *agentStatusRepository) List(ctx context.Context) ([]AgentStatusView, error) {
+	var rows []agentStatusRow
+	if err := r.db.WithContext(ctx).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	statuses := make([]AgentStatusView, 0, len(rows))
+	for _, row := range rows {
+		statuses = append(statuses, AgentStatusView{UserID: row.UserID, Status: row.Status})
+	}
+	return statuses, nil
+}
+
 func lockAgentStatus(tx *gorm.DB, agentID string) error {
 	var status agentStatusRow
 	return tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&status, "user_id = ?", agentID).Error

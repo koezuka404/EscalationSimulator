@@ -18,7 +18,9 @@ import (
 	"escalator/redis"
 	"escalator/repository"
 	"escalator/router"
+	"escalator/seed"
 	"escalator/usecase"
+	"escalator/websocket"
 )
 
 //設定を読み、データベースと待ち順につないでサーバーを起動する
@@ -45,7 +47,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
-	if err := repository.SeedCustomersIfEmpty(context.Background(), repository.NewCustomerRepository(conn)); err != nil {
+	if err := seed.SeedCustomersIfEmpty(context.Background(), repository.NewCustomerRepository(conn)); err != nil {
 		fmt.Fprintf(os.Stderr, "サンプルの顧客を登録できませんでした: %v\n", err)
 		os.Exit(1)
 	}
@@ -71,25 +73,33 @@ func main() {
 		usecase.NewCreateAgent(users, current, cfg.BcryptCost),
 	))
 	tickets := repository.NewTicketRepository(conn)
+	statuses := repository.NewAgentStatusRepository(conn)
+	notices := websocket.NewHub(current, usecase.NewQueueSnapshot(tickets, customers, users, statuses), cfg.CORSAllowedOrigin)
+	go notices.Run()
+	router.Live(e, notices)
 	router.Tickets(e, controller.NewTicketAPI(
-		usecase.NewCreateTicket(tickets, customers, current, order),
-		usecase.NewCloseTicket(tickets, order, current),
-		usecase.NewChangeSeverity(tickets, customers, current, order),
-		usecase.NewReturnTicketToQueue(tickets, customers, order, current),
+		usecase.NewCreateTicket(tickets, customers, current, order, notices),
+		usecase.NewCloseTicket(tickets, order, current, notices),
+		usecase.NewChangeSeverity(tickets, customers, current, order, notices),
+		usecase.NewReturnTicketToQueue(tickets, customers, order, current, notices),
 		usecase.NewListMyTickets(tickets, customers, users, current),
 		usecase.NewShowTicket(tickets, customers, users, current),
 		usecase.NewAddWorkNote(tickets, current),
 	))
-	router.Agent(e, controller.NewAgentAPI(usecase.NewChangeAgentStatus(users, customers, repository.NewAgentStatusRepository(conn), order, current)))
+	router.Agent(e, controller.NewAgentAPI(usecase.NewChangeAgentStatus(users, customers, statuses, order, current, notices)))
 	router.Queue(e, controller.NewQueueAPI(
 		usecase.NewListWaitingTickets(tickets, customers, current),
-		usecase.NewClaimNextTicket(repository.NewClaimRepository(conn), order, current),
+		usecase.NewClaimNextTicket(repository.NewClaimRepository(conn), order, current, notices),
 	))
 	jobCtx, stopJob := context.WithCancel(context.Background())
 	defer stopJob()
 	go job.NewRecalcPriority(
-		usecase.NewRecalcOpenScores(tickets, customers, order),
+		usecase.NewRecalcOpenScores(tickets, customers, order, notices),
 		order,
+		cfg.PriorityRecalc,
+	).Run(jobCtx)
+	go job.NewReleaseDisconnectedAgent(
+		usecase.NewReleaseDisconnectedAgents(users, customers, statuses, order, notices, notices, cfg.AgentDisconnectGrace),
 		cfg.PriorityRecalc,
 	).Run(jobCtx)
 

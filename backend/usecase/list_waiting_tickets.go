@@ -50,6 +50,10 @@ func (l *ListWaitingTickets) Execute(ctx context.Context, authorization string) 
 	if err != nil {
 		return nil, err
 	}
+	return arrangeWaiting(open, customers, time.Now()), nil
+}
+
+func arrangeWaiting(open []entity.Ticket, customers []entity.Customer, now time.Time) []WaitingTicket {
 	byID := make(map[string]entity.Customer, len(customers))
 	for _, customer := range customers {
 		byID[customer.ID] = customer
@@ -57,7 +61,6 @@ func (l *ListWaitingTickets) Execute(ctx context.Context, authorization string) 
 	sort.Slice(open, func(i, j int) bool {
 		return entity.WaitingFirst(open[i].PriorityScore, open[i].CreatedAt, open[i].ID, open[j].PriorityScore, open[j].CreatedAt, open[j].ID)
 	})
-	now := time.Now()
 	waiting := make([]WaitingTicket, 0, len(open))
 	for i, ticket := range open {
 		customer := byID[ticket.CustomerID]
@@ -76,5 +79,5 @@ func (l *ListWaitingTickets) Execute(ctx context.Context, authorization string) 
 			CustomerName:     customer.Name,
 		})
 	}
-	return waiting, nil
+	return waiting
 }

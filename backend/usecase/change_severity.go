@@ -14,10 +14,11 @@ type ChangeSeverity struct {
 	customers repository.CustomerRepository
 	current   *CurrentUser
 	queue     repository.TicketQueue
+	notices   Notifier
 }
 
-func NewChangeSeverity(tickets repository.TicketRepository, customers repository.CustomerRepository, current *CurrentUser, queue repository.TicketQueue) *ChangeSeverity {
-	return &ChangeSeverity{tickets: tickets, customers: customers, current: current, queue: queue}
+func NewChangeSeverity(tickets repository.TicketRepository, customers repository.CustomerRepository, current *CurrentUser, queue repository.TicketQueue, notices Notifier) *ChangeSeverity {
+	return &ChangeSeverity{tickets: tickets, customers: customers, current: current, queue: queue, notices: notices}
 }
 
 //緊急度を変え、対応待ちなら待ち順の点数も直す
@@ -56,6 +57,12 @@ func (c *ChangeSeverity) Execute(ctx context.Context, authorization, ticketID, r
 	if err != nil {
 		return entity.Ticket{}, err
 	}
+	publish(c.notices, true, updated.CreatedBy, map[string]any{
+		"type":           "severity_changed",
+		"ticket_id":      updated.ID,
+		"severity":       updated.Severity,
+		"priority_score": updated.PriorityScore,
+	})
 	if updated.Status != entity.TicketOpen {
 		return updated, nil
 	}

@@ -4,6 +4,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"escalator/controller"
+	"escalator/websocket"
 )
 
 func Customers(e *echo.Echo, api *controller.CustomerAPI) {
@@ -28,6 +29,10 @@ func Tickets(e *echo.Echo, api *controller.TicketAPI) {
 
 func Agent(e *echo.Echo, api *controller.AgentAPI) {
 	e.PATCH("/api/agent/status", api.Update)
+}
+
+func Live(e *echo.Echo, hub *websocket.Hub) {
+	e.GET("/ws", hub.Serve)
 }
 
 func Queue(e *echo.Echo, api *controller.QueueAPI) {

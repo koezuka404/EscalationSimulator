@@ -27,6 +27,7 @@ type ticketRow struct {
 	ClaimedAt     *time.Time
 	ClosedAt      *time.Time
 	CloseComment  string
+	SlaNotifiedAt *time.Time
 	UpdatedAt     time.Time
 }
 
@@ -287,6 +288,17 @@ func (r *ticketRepository) UpdateOpenScore(ctx context.Context, id string, score
 	return result.RowsAffected > 0, nil
 }
 
+//まだ知らせていない約束時間オーバーに、一度だけ印を付ける
+func (r *ticketRepository) MarkSLANotified(ctx context.Context, id string, at time.Time) (bool, error) {
+	result := r.db.WithContext(ctx).Model(&ticketRow{}).
+		Where("id = ? AND status = ? AND sla_notified_at IS NULL", id, string(entity.TicketOpen)).
+		Update("sla_notified_at", at)
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.RowsAffected > 0, nil
+}
+
 //申請者が起票したチケットを、更新が新しい順で返す詳細の本文は読まない
 func (r *ticketRepository) ListByCreator(ctx context.Context, createdBy string) ([]entity.Ticket, error) {
 	var rows []ticketRow
@@ -402,7 +414,7 @@ func (r *ticketRepository) ListWorkNotes(ctx context.Context, ticketID string) (
 func (r *ticketRepository) ListOpen(ctx context.Context) ([]entity.Ticket, error) {
 	var rows []ticketRow
 	err := r.db.WithContext(ctx).
-		Select("id", "customer_id", "created_by", "title", "severity", "category", "status", "assignee_id", "priority_score", "created_at").
+		Select("id", "customer_id", "created_by", "title", "severity", "category", "status", "assignee_id", "priority_score", "created_at", "sla_notified_at").
 		Where("status = ?", string(entity.TicketOpen)).
 		Find(&rows).Error
 	if err != nil {
@@ -435,6 +447,9 @@ func toTicket(row ticketRow) entity.Ticket {
 	}
 	if row.ClosedAt != nil {
 		ticket.ClosedAt = *row.ClosedAt
+	}
+	if row.SlaNotifiedAt != nil {
+		ticket.SlaNotifiedAt = *row.SlaNotifiedAt
 	}
 	return ticket
 }

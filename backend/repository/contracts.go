@@ -42,6 +42,7 @@ type TicketRepository interface {
 	Close(ctx context.Context, id, comment string, closedAt time.Time) (entity.Ticket, error)
 	UpdateSeverity(ctx context.Context, id string, severity, planScore, slaMinutes int, reason, changedBy string, now time.Time) (entity.Ticket, error)
 	UpdateOpenScore(ctx context.Context, id string, score int, now time.Time) (bool, error)
+	MarkSLANotified(ctx context.Context, id string, at time.Time) (bool, error)
 	Release(ctx context.Context, id string, planScore, slaMinutes int, now time.Time) (entity.Ticket, error)
 }
 
@@ -51,9 +52,15 @@ type TicketQueue interface {
 	Remove(ctx context.Context, ticketID string) error
 }
 
+type AgentStatusView struct {
+	UserID string
+	Status string
+}
+
 type AgentStatusRepository interface {
 	GoAvailable(ctx context.Context, agentID string, now time.Time) error
 	GoOffline(ctx context.Context, agentID string, now time.Time, scoreOf func(entity.Ticket) (int, error)) ([]entity.Ticket, error)
+	List(ctx context.Context) ([]AgentStatusView, error)
 }
 
 type ClaimStore interface {

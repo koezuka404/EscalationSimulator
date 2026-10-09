@@ -89,6 +89,7 @@ type Ticket struct {
 	ClaimedAt     time.Time
 	ClosedAt      time.Time
 	CloseComment  string
+	SlaNotifiedAt time.Time
 }
 
 //件名、詳細、種類、緊急度を確かめて、対応待ちのチケットを作る
