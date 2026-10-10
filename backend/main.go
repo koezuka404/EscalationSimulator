@@ -14,7 +14,9 @@ import (
 	"escalator/config"
 	"escalator/controller"
 	"escalator/db"
+	"escalator/entity"
 	"escalator/job"
+	"escalator/middleware"
 	"escalator/redis"
 	"escalator/repository"
 	"escalator/router"
@@ -23,7 +25,7 @@ import (
 	"escalator/websocket"
 )
 
-// 設定を読み、データベースと待ち順につないでサーバーを起動する
+//設定を読み、データベースと待ち順につないでサーバーを起動する
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
@@ -65,6 +67,13 @@ func main() {
 	users := repository.NewUserRepository(conn)
 	sessions := repository.NewSessionRepository(conn)
 	customers := repository.NewCustomerRepository(conn)
+	limits := middleware.NewLimiter(redis.NewGate(order), []byte(cfg.JWTSecret), cfg.JWTIssuer, cfg.JWTAudience, cfg.RefreshTokenCookieName, func(ctx context.Context, tokenHash string) (string, error) {
+		userID, err := sessions.FindUserIDByHash(ctx, tokenHash)
+		if errors.Is(err, entity.ErrInvalidRefresh) {
+			return "", nil
+		}
+		return userID, err
+	})
 	router.Customers(e, controller.NewCustomerAPI(usecase.NewCustomers(customers)))
 	current := usecase.NewCurrentUser(users, []byte(cfg.JWTSecret), cfg.JWTIssuer, cfg.JWTAudience)
 	router.Me(e, controller.NewMeAPI(current))
@@ -88,7 +97,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "前回のデモを止めた状態にできませんでした: %v\n", err)
 		os.Exit(1)
 	}
-	router.Demo(e, controller.NewDemoAPI(demo))
+	router.Demo(e, controller.NewDemoAPI(demo), limits)
 	router.Dashboard(e, controller.NewDashboardAPI(dashboard))
 	router.AdminTickets(e, controller.NewAdminTicketAPI(usecase.NewSearchTickets(tickets, customers, users, current)))
 	router.Tickets(e, controller.NewTicketAPI(
@@ -99,12 +108,12 @@ func main() {
 		usecase.NewListMyTickets(tickets, customers, users, current),
 		usecase.NewShowTicket(tickets, customers, users, current),
 		usecase.NewAddWorkNote(tickets, current),
-	))
+	), limits)
 	router.Agent(e, controller.NewAgentAPI(usecase.NewChangeAgentStatus(users, customers, statuses, order, current, notices)))
 	router.Queue(e, controller.NewQueueAPI(
 		usecase.NewListWaitingTickets(tickets, customers, current),
 		usecase.NewClaimNextTicket(repository.NewClaimRepository(conn), order, current, notices),
-	))
+	), limits)
 	go job.NewRecalcPriority(
 		usecase.NewRecalcOpenScores(tickets, customers, order, notices),
 		dashboard,
@@ -125,7 +134,7 @@ func main() {
 		cfg.CSRFTokenCookieName,
 		cfg.CookieSecure,
 		int(cfg.RefreshTokenTTL.Seconds()),
-	))
+	), limits)
 
 	go func() {
 		if err := e.Start(fmt.Sprintf(":%d", cfg.HTTPPort)); err != nil && !errors.Is(err, http.ErrServerClosed) {

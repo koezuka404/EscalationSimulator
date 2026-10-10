@@ -30,6 +30,7 @@ type UserRepository interface {
 type SessionRepository interface {
 	Save(ctx context.Context, session entity.Session) error
 	RevokeByHash(ctx context.Context, tokenHash string) error
+	FindUserIDByHash(ctx context.Context, tokenHash string) (string, error)
 	Rotate(ctx context.Context, oldHash string, next entity.Session, now time.Time) (userID string, reused bool, err error)
 }
 
