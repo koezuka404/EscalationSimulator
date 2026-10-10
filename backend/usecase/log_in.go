@@ -9,14 +9,13 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
-	"escalator/entity"
-	"escalator/repository"
-	"escalator/usecase/crypto"
+	"escalator/domain"
+	"escalator/infra/token"
 )
 
 type LogIn struct {
-	users       repository.UserRepository
-	sessions    repository.SessionRepository
+	users       domain.UserRepository
+	sessions    domain.SessionRepository
 	secret      []byte
 	issuer      string
 	audience    string
@@ -31,10 +30,10 @@ type LoginResult struct {
 	ExpiresAt    time.Time
 	RefreshToken string
 	CSRFToken    string
-	User         entity.User
+	User         domain.User
 }
 
-func NewLogIn(users repository.UserRepository, sessions repository.SessionRepository, secret []byte, issuer, audience string, accessTTL, refreshTTL time.Duration, maxFailures int, lock time.Duration) *LogIn {
+func NewLogIn(users domain.UserRepository, sessions domain.SessionRepository, secret []byte, issuer, audience string, accessTTL, refreshTTL time.Duration, maxFailures int, lock time.Duration) *LogIn {
 	return &LogIn{
 		users:       users,
 		sessions:    sessions,
@@ -52,20 +51,20 @@ func NewLogIn(users repository.UserRepository, sessions repository.SessionReposi
 func (l *LogIn) Execute(ctx context.Context, email, password string) (LoginResult, error) {
 	now := time.Now()
 	user, err := l.users.FindByEmail(ctx, normalizeEmail(email))
-	if errors.Is(err, entity.ErrUserNotFound) {
-		return LoginResult{}, entity.ErrLoginFailed
+	if errors.Is(err, domain.ErrUserNotFound) {
+		return LoginResult{}, domain.ErrLoginFailed
 	}
 	if err != nil {
 		return LoginResult{}, err
 	}
 	if user.Locked(now) {
-		return LoginResult{}, entity.ErrLoginLocked
+		return LoginResult{}, domain.ErrLoginLocked
 	}
 	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)) != nil {
 		return LoginResult{}, l.recordFailure(ctx, user, now)
 	}
-	if user.Status != entity.StatusActive {
-		return LoginResult{}, entity.ErrLoginFailed
+	if user.Status != domain.StatusActive {
+		return LoginResult{}, domain.ErrLoginFailed
 	}
 	user.FailedLoginCount = 0
 	user.LockedUntil = time.Time{}
@@ -73,19 +72,19 @@ func (l *LogIn) Execute(ctx context.Context, email, password string) (LoginResul
 		return LoginResult{}, err
 	}
 
-	accessToken, expiresAt, err := crypto.IssueAccess(l.secret, l.issuer, l.audience, user.ID, user.AuthVersion, l.accessTTL, now)
+	accessToken, expiresAt, err := token.IssueAccess(l.secret, l.issuer, l.audience, user.ID, user.AuthVersion, l.accessTTL, now)
 	if err != nil {
 		return LoginResult{}, err
 	}
-	refreshToken, refreshHash, err := crypto.NewSecretToken()
+	refreshToken, refreshHash, err := token.NewSecretToken()
 	if err != nil {
 		return LoginResult{}, err
 	}
-	csrfToken, _, err := crypto.NewSecretToken()
+	csrfToken, _, err := token.NewSecretToken()
 	if err != nil {
 		return LoginResult{}, err
 	}
-	if err := l.sessions.Save(ctx, entity.Session{
+	if err := l.sessions.Save(ctx, domain.Session{
 		UserID:    user.ID,
 		TokenHash: refreshHash,
 		FamilyID:  uuid.NewString(),
@@ -102,7 +101,7 @@ func (l *LogIn) Execute(ctx context.Context, email, password string) (LoginResul
 	}, nil
 }
 
-func (l *LogIn) recordFailure(ctx context.Context, user entity.User, now time.Time) error {
+func (l *LogIn) recordFailure(ctx context.Context, user domain.User, now time.Time) error {
 	user.FailedLoginCount++
 	if user.FailedLoginCount >= l.maxFailures {
 		user.FailedLoginCount = 0
@@ -110,12 +109,12 @@ func (l *LogIn) recordFailure(ctx context.Context, user entity.User, now time.Ti
 		if err := l.users.UpdateLoginState(ctx, user); err != nil {
 			return err
 		}
-		return entity.ErrLoginLocked
+		return domain.ErrLoginLocked
 	}
 	if err := l.users.UpdateLoginState(ctx, user); err != nil {
 		return err
 	}
-	return entity.ErrLoginFailed
+	return domain.ErrLoginFailed
 }
 
 func normalizeEmail(email string) string {

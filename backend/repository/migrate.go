@@ -28,5 +28,8 @@ func Migrate(db *gorm.DB) error {
 	if err := MigrateAgentStatuses(db); err != nil {
 		return fmt.Errorf("担当者の稼働用のテーブルを作成できませんでした: %w", err)
 	}
+	if err := MigrateDemoRuns(db); err != nil {
+		return fmt.Errorf("デモ用のテーブルを作成できませんでした: %w", err)
+	}
 	return nil
 }

@@ -4,14 +4,13 @@ import (
 	"context"
 	"time"
 
-	"escalator/entity"
-	"escalator/repository"
-	"escalator/usecase/crypto"
+	"escalator/domain"
+	"escalator/infra/token"
 )
 
 type Refresh struct {
-	users      repository.UserRepository
-	sessions   repository.SessionRepository
+	users      domain.UserRepository
+	sessions   domain.SessionRepository
 	secret     []byte
 	issuer     string
 	audience   string
@@ -19,7 +18,7 @@ type Refresh struct {
 	refreshTTL time.Duration
 }
 
-func NewRefresh(users repository.UserRepository, sessions repository.SessionRepository, secret []byte, issuer, audience string, accessTTL, refreshTTL time.Duration) *Refresh {
+func NewRefresh(users domain.UserRepository, sessions domain.SessionRepository, secret []byte, issuer, audience string, accessTTL, refreshTTL time.Duration) *Refresh {
 	return &Refresh{
 		users:      users,
 		sessions:   sessions,
@@ -31,21 +30,21 @@ func NewRefresh(users repository.UserRepository, sessions repository.SessionRepo
 	}
 }
 
-//再ログイン用の印を新しい印に替え、ログイン用トークンを出し直す
+// 再ログイン用の印を新しい印に替え、ログイン用トークンを出し直す。
 func (r *Refresh) Execute(ctx context.Context, refreshToken string) (LoginResult, error) {
 	if refreshToken == "" {
-		return LoginResult{}, entity.ErrInvalidRefresh
+		return LoginResult{}, domain.ErrInvalidRefresh
 	}
 	now := time.Now()
-	raw, hash, err := crypto.NewSecretToken()
+	raw, hash, err := token.NewSecretToken()
 	if err != nil {
 		return LoginResult{}, err
 	}
-	csrfToken, _, err := crypto.NewSecretToken()
+	csrfToken, _, err := token.NewSecretToken()
 	if err != nil {
 		return LoginResult{}, err
 	}
-	userID, reused, err := r.sessions.Rotate(ctx, crypto.Hash(refreshToken), entity.Session{
+	userID, reused, err := r.sessions.Rotate(ctx, token.Hash(refreshToken), domain.Session{
 		TokenHash: hash,
 		ExpiresAt: now.Add(r.refreshTTL),
 	}, now)
@@ -56,13 +55,13 @@ func (r *Refresh) Execute(ctx context.Context, refreshToken string) (LoginResult
 		if err := r.users.BumpAuthVersion(ctx, userID); err != nil {
 			return LoginResult{}, err
 		}
-		return LoginResult{}, entity.ErrInvalidRefresh
+		return LoginResult{}, domain.ErrInvalidRefresh
 	}
 	user, err := r.users.FindByID(ctx, userID)
-	if err != nil || user.Status != entity.StatusActive {
-		return LoginResult{}, entity.ErrInvalidRefresh
+	if err != nil || user.Status != domain.StatusActive {
+		return LoginResult{}, domain.ErrInvalidRefresh
 	}
-	accessToken, expiresAt, err := crypto.IssueAccess(r.secret, r.issuer, r.audience, user.ID, user.AuthVersion, r.accessTTL, now)
+	accessToken, expiresAt, err := token.IssueAccess(r.secret, r.issuer, r.audience, user.ID, user.AuthVersion, r.accessTTL, now)
 	if err != nil {
 		return LoginResult{}, err
 	}

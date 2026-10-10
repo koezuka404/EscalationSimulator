@@ -23,6 +23,8 @@ type UserRepository interface {
 	UpdateCustomer(ctx context.Context, user entity.User) error
 	BumpAuthVersion(ctx context.Context, id string) error
 	ListNames(ctx context.Context, ids []string) (map[string]string, error)
+	ListApplicants(ctx context.Context) ([]entity.User, error)
+	List(ctx context.Context) ([]entity.User, error)
 }
 
 type SessionRepository interface {
@@ -70,6 +72,14 @@ type AgentStatusRepository interface {
 	GoAvailable(ctx context.Context, agentID string, now time.Time) error
 	GoOffline(ctx context.Context, agentID string, now time.Time, scoreOf func(entity.Ticket) (int, error)) ([]entity.Ticket, error)
 	List(ctx context.Context) ([]AgentStatusView, error)
+}
+
+type DemoRepository interface {
+	Start(ctx context.Context, run entity.DemoRun) (entity.DemoRun, error)
+	AddGenerated(ctx context.Context, id string) (entity.DemoRun, error)
+	Finish(ctx context.Context, id, status string, at time.Time) (entity.DemoRun, bool, error)
+	StopRunning(ctx context.Context, at time.Time) (entity.DemoRun, error)
+	CloseInterrupted(ctx context.Context, at time.Time) error
 }
 
 type ClaimStore interface {

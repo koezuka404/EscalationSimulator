@@ -1,11 +1,19 @@
+import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { BrowserRouter } from "react-router-dom";
+import { App } from "./App";
+import { AuthProvider } from "./auth/AuthProvider";
+import { LiveProvider } from "./websocket/connection";
 import "./index.css";
 
-const apiOrigin = import.meta.env.VITE_API_ORIGIN ?? "http://localhost:8083";
-
 createRoot(document.getElementById("root")!).render(
-  <main className="p-8">
-    <h1 className="text-2xl font-semibold">エスカレシミュレーター</h1>
-    <p className="mt-2">API: {apiOrigin}</p>
-  </main>,
+  <StrictMode>
+    <AuthProvider>
+      <BrowserRouter>
+        <LiveProvider>
+          <App />
+        </LiveProvider>
+      </BrowserRouter>
+    </AuthProvider>
+  </StrictMode>,
 );

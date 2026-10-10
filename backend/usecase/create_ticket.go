@@ -37,12 +37,17 @@ func (c *CreateTicket) Execute(ctx context.Context, authorization, title, descri
 	if err != nil {
 		return entity.Ticket{}, err
 	}
+	return c.CreateFor(ctx, actor.ID, customer, title, description, severity, entity.Category(category))
+}
+
+//所属顧客の点数でチケットを保存し、待ち順へ載せて知らせる
+func (c *CreateTicket) CreateFor(ctx context.Context, createdBy string, customer entity.Customer, title, description string, severity int, category entity.Category) (entity.Ticket, error) {
 	planScore, err := customer.PlanScore()
 	if err != nil {
 		return entity.Ticket{}, err
 	}
 	now := time.Now()
-	ticket, err := entity.NewTicket(actor.CustomerID, actor.ID, title, description, severity, entity.Category(category), now)
+	ticket, err := entity.NewTicket(customer.ID, createdBy, title, description, severity, category, now)
 	if err != nil {
 		return entity.Ticket{}, err
 	}

@@ -13,6 +13,7 @@ func Customers(e *echo.Echo, api *controller.CustomerAPI) {
 }
 
 func Users(e *echo.Echo, api *controller.UserAPI) {
+	e.GET("/api/users", api.List)
 	e.POST("/api/users", api.CreateAgent)
 	e.PATCH("/api/users/:id", api.LinkCustomer)
 }
@@ -29,6 +30,11 @@ func Tickets(e *echo.Echo, api *controller.TicketAPI) {
 
 func Agent(e *echo.Echo, api *controller.AgentAPI) {
 	e.PATCH("/api/agent/status", api.Update)
+}
+
+func Demo(e *echo.Echo, api *controller.DemoAPI) {
+	e.POST("/api/admin/demo/start", api.Start)
+	e.POST("/api/admin/demo/stop", api.Stop)
 }
 
 func AdminTickets(e *echo.Echo, api *controller.AdminTicketAPI) {

@@ -13,10 +13,24 @@ import (
 type UserAPI struct {
 	link   *usecase.LinkApplicant
 	create *usecase.CreateAgent
+	list   *usecase.ListUsers
 }
 
-func NewUserAPI(link *usecase.LinkApplicant, create *usecase.CreateAgent) *UserAPI {
-	return &UserAPI{link: link, create: create}
+func NewUserAPI(link *usecase.LinkApplicant, create *usecase.CreateAgent, list *usecase.ListUsers) *UserAPI {
+	return &UserAPI{link: link, create: create, list: list}
+}
+
+//利用者の一覧を返す
+func (a *UserAPI) List(c echo.Context) error {
+	users, err := a.list.Execute(c.Request().Context(), c.Request().Header.Get("Authorization"))
+	if err != nil {
+		return writeListUsersError(c, err)
+	}
+	body := make([]userJSON, 0, len(users))
+	for _, user := range users {
+		body = append(body, toUserJSON(user))
+	}
+	return c.JSON(http.StatusOK, body)
 }
 
 //担当者の登録を受ける
@@ -63,6 +77,17 @@ func writeCreateAgentError(c echo.Context, err error) error {
 		return c.JSON(http.StatusConflict, messageJSON{Message: err.Error()})
 	default:
 		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "担当者を登録できませんでした。しばらくしてから、もう一度試してください"})
+	}
+}
+
+func writeListUsersError(c echo.Context, err error) error {
+	switch {
+	case errors.Is(err, entity.ErrUnauthenticated):
+		return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})
+	case errors.Is(err, entity.ErrForbidden):
+		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
+	default:
+		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "利用者の一覧をまとめられませんでした。しばらくしてから、もう一度試してください"})
 	}
 }
 

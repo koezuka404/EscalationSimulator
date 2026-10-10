@@ -11,6 +11,7 @@ type Message struct {
 	Staff       bool
 	Admins      bool
 	ApplicantID string
+	UserID      string
 	Body        []byte
 }
 
@@ -40,6 +41,18 @@ func publishAdmins(notices Notifier, payload any) {
 		return
 	}
 	notices.Send(Message{Admins: true, Body: body})
+}
+
+func publishUser(notices Notifier, userID string, payload any) {
+	if notices == nil || userID == "" {
+		return
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("画面への知らせを作れませんでした: %v", err)
+		return
+	}
+	notices.Send(Message{UserID: userID, Body: body})
 }
 
 func ticketView(ticket entity.Ticket, customerName, plan string) map[string]any {

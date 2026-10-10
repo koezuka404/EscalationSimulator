@@ -23,7 +23,7 @@ import (
 	"escalator/websocket"
 )
 
-//設定を読み、データベースと待ち順につないでサーバーを起動する
+// 設定を読み、データベースと待ち順につないでサーバーを起動する
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
@@ -71,6 +71,7 @@ func main() {
 	router.Users(e, controller.NewUserAPI(
 		usecase.NewLinkApplicant(users, customers, current),
 		usecase.NewCreateAgent(users, current, cfg.BcryptCost),
+		usecase.NewListUsers(users, current),
 	))
 	tickets := repository.NewTicketRepository(conn)
 	statuses := repository.NewAgentStatusRepository(conn)
@@ -79,10 +80,19 @@ func main() {
 	dashboard.SetNotifier(notices)
 	go notices.Run()
 	router.Live(e, notices)
+	jobCtx, stopJob := context.WithCancel(context.Background())
+	defer stopJob()
+	createTicket := usecase.NewCreateTicket(tickets, customers, current, order, notices)
+	demo := usecase.NewRunDemo(users, customers, repository.NewDemoRepository(conn), createTicket, notices, jobCtx)
+	if err := demo.Recover(context.Background()); err != nil {
+		fmt.Fprintf(os.Stderr, "前回のデモを止めた状態にできませんでした: %v\n", err)
+		os.Exit(1)
+	}
+	router.Demo(e, controller.NewDemoAPI(demo))
 	router.Dashboard(e, controller.NewDashboardAPI(dashboard))
 	router.AdminTickets(e, controller.NewAdminTicketAPI(usecase.NewSearchTickets(tickets, customers, users, current)))
 	router.Tickets(e, controller.NewTicketAPI(
-		usecase.NewCreateTicket(tickets, customers, current, order, notices),
+		createTicket,
 		usecase.NewCloseTicket(tickets, order, current, notices),
 		usecase.NewChangeSeverity(tickets, customers, current, order, notices),
 		usecase.NewReturnTicketToQueue(tickets, customers, order, current, notices),
@@ -95,8 +105,6 @@ func main() {
 		usecase.NewListWaitingTickets(tickets, customers, current),
 		usecase.NewClaimNextTicket(repository.NewClaimRepository(conn), order, current, notices),
 	))
-	jobCtx, stopJob := context.WithCancel(context.Background())
-	defer stopJob()
 	go job.NewRecalcPriority(
 		usecase.NewRecalcOpenScores(tickets, customers, order, notices),
 		dashboard,

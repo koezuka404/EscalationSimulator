@@ -134,6 +134,41 @@ func (r *userRepository) UpdateCustomer(ctx context.Context, user entity.User) e
 	return nil
 }
 
+//削除済み以外の利用者を名前順で返す
+func (r *userRepository) List(ctx context.Context) ([]entity.User, error) {
+	var rows []userRow
+	err := r.db.WithContext(ctx).
+		Select("id", "email", "name", "role", "customer_id", "status").
+		Where("status <> ?", string(entity.StatusDeleted)).
+		Order("name").
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	users := make([]entity.User, 0, len(rows))
+	for _, row := range rows {
+		users = append(users, userFromRow(row))
+	}
+	return users, nil
+}
+
+//顧客に結びついている申請者を返す
+func (r *userRepository) ListApplicants(ctx context.Context) ([]entity.User, error) {
+	var rows []userRow
+	err := r.db.WithContext(ctx).
+		Select("id", "name", "role", "customer_id", "status").
+		Where("role = ? AND status = ? AND customer_id <> ''", string(entity.RoleApplicant), string(entity.StatusActive)).
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	users := make([]entity.User, 0, len(rows))
+	for _, row := range rows {
+		users = append(users, userFromRow(row))
+	}
+	return users, nil
+}
+
 //利用者IDから名前を返す
 func (r *userRepository) ListNames(ctx context.Context, ids []string) (map[string]string, error) {
 	names := make(map[string]string, len(ids))

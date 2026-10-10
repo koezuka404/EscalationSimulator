@@ -158,6 +158,9 @@ func (h *Hub) ForgetGone(userID string) {
 }
 
 func (c *client) wants(message usecase.Message) bool {
+	if message.UserID != "" {
+		return c.userID == message.UserID
+	}
 	if message.Admins && c.role == entity.RoleAdmin {
 		return true
 	}

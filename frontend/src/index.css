@@ -1,1 +1,15 @@
 @import "tailwindcss";
+
+body {
+  margin: 0;
+  font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", Meiryo, sans-serif;
+  background: #f3efe6;
+  color: #1c1917;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
