@@ -8,6 +8,10 @@ import (
 	"escalator/websocket"
 )
 
+func Health(e *echo.Echo, api *controller.HealthAPI) {
+	e.GET("/api/health", api.Show)
+}
+
 func Customers(e *echo.Echo, api *controller.CustomerAPI) {
 	e.GET("/admin/customers", api.List)
 	e.PUT("/admin/customers/:id", api.Update)

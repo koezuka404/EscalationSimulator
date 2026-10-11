@@ -42,6 +42,11 @@ func (o *TicketOrder) Close() error {
 	return o.client.Close()
 }
 
+//待ち順の保存先が応答するか確かめる
+func (o *TicketOrder) Ping(ctx context.Context) error {
+	return o.client.Ping(ctx).Err()
+}
+
 //チケットのIDと点数を待ち順へ載せる
 func (o *TicketOrder) Enqueue(ctx context.Context, ticketID string, score int) error {
 	return o.client.ZAdd(ctx, ticketQueueKey, goredis.Z{

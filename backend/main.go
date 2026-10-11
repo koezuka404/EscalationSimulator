@@ -64,6 +64,7 @@ func main() {
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
+	router.Health(e, controller.NewHealthAPI(usecase.NewCheckHealth(db.NewProbe(conn), order)))
 	users := repository.NewUserRepository(conn)
 	sessions := repository.NewSessionRepository(conn)
 	customers := repository.NewCustomerRepository(conn)

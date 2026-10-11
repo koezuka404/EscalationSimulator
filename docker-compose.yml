@@ -33,7 +33,7 @@ services:
       HTTP_PORT: 8080
       DATABASE_URL: postgres://escalator:escalator@postgres:5432/escalator?sslmode=disable
       REDIS_URL: redis://redis:6379/0
-      CORS_ALLOWED_ORIGIN: http://localhost:5175
+      CORS_ALLOWED_ORIGIN: http://localhost:5180
     ports:
       - "8083:8080"
     depends_on:
@@ -47,7 +47,7 @@ services:
     environment:
       API_PROXY_TARGET: http://api:8080
     ports:
-      - "5175:5173"
+      - "5180:5180"
     depends_on:
       - api
 

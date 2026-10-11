@@ -6,7 +6,7 @@ func validEnv() map[string]string {
 	return map[string]string{
 		"APP_ENV":             "development",
 		"JWT_SECRET":          "change-me-use-at-least-32-bytes!!",
-		"CORS_ALLOWED_ORIGIN": "http://localhost:5175",
+		"CORS_ALLOWED_ORIGIN": "http://localhost:5180",
 		"DATABASE_URL":        "postgres://escalator:escalator@localhost:5438/escalator?sslmode=disable",
 		"REDIS_URL":           "redis://localhost:6384/0",
 	}
