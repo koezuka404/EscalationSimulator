@@ -64,6 +64,10 @@ func main() {
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
+	e.Use(middleware.RequestID())
+	e.Use(middleware.AccessLog())
+	e.Use(middleware.Recover())
+	e.Use(middleware.AllowOrigin(cfg.CORSAllowedOrigin))
 	router.Health(e, controller.NewHealthAPI(usecase.NewCheckHealth(db.NewProbe(conn), order)))
 	users := repository.NewUserRepository(conn)
 	sessions := repository.NewSessionRepository(conn)
@@ -77,12 +81,13 @@ func main() {
 	})
 	router.Customers(e, controller.NewCustomerAPI(usecase.NewCustomers(customers)))
 	current := usecase.NewCurrentUser(users, []byte(cfg.JWTSecret), cfg.JWTIssuer, cfg.JWTAudience)
-	router.Me(e, controller.NewMeAPI(current))
+	requireLogin := middleware.RequireLogin(current.Execute)
+	router.Me(e, controller.NewMeAPI(current), requireLogin)
 	router.Users(e, controller.NewUserAPI(
 		usecase.NewLinkApplicant(users, customers, current),
 		usecase.NewCreateAgent(users, current, cfg.BcryptCost),
 		usecase.NewListUsers(users, current),
-	))
+	), requireLogin)
 	tickets := repository.NewTicketRepository(conn)
 	statuses := repository.NewAgentStatusRepository(conn)
 	dashboard := usecase.NewShowDashboard(tickets, customers, statuses, current)
@@ -98,9 +103,9 @@ func main() {
 		fmt.Fprintf(os.Stderr, "前回のデモを止めた状態にできませんでした: %v\n", err)
 		os.Exit(1)
 	}
-	router.Demo(e, controller.NewDemoAPI(demo), limits)
-	router.Dashboard(e, controller.NewDashboardAPI(dashboard))
-	router.AdminTickets(e, controller.NewAdminTicketAPI(usecase.NewSearchTickets(tickets, customers, users, current)))
+	router.Demo(e, controller.NewDemoAPI(demo), limits, requireLogin)
+	router.Dashboard(e, controller.NewDashboardAPI(dashboard), requireLogin)
+	router.AdminTickets(e, controller.NewAdminTicketAPI(usecase.NewSearchTickets(tickets, customers, users, current)), requireLogin)
 	router.Tickets(e, controller.NewTicketAPI(
 		createTicket,
 		usecase.NewCloseTicket(tickets, order, current, notices),
@@ -109,12 +114,12 @@ func main() {
 		usecase.NewListMyTickets(tickets, customers, users, current),
 		usecase.NewShowTicket(tickets, customers, users, current),
 		usecase.NewAddWorkNote(tickets, current),
-	), limits)
-	router.Agent(e, controller.NewAgentAPI(usecase.NewChangeAgentStatus(users, customers, statuses, order, current, notices)))
+	), limits, requireLogin)
+	router.Agent(e, controller.NewAgentAPI(usecase.NewChangeAgentStatus(users, customers, statuses, order, current, notices)), requireLogin)
 	router.Queue(e, controller.NewQueueAPI(
 		usecase.NewListWaitingTickets(tickets, customers, current),
 		usecase.NewClaimNextTicket(repository.NewClaimRepository(conn), order, current, notices),
-	), limits)
+	), limits, requireLogin)
 	go job.NewRecalcPriority(
 		usecase.NewRecalcOpenScores(tickets, customers, order, notices),
 		dashboard,
