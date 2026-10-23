@@ -8,14 +8,20 @@ export function UserTable({
   users,
   customers,
   availability,
+  selfId,
   onLinked,
   onOffline,
+  onSuspended,
+  onRoleChanged,
 }: {
   users: User[];
   customers: Customer[];
   availability: Record<string, string>;
+  selfId: string;
   onLinked: (user: User) => void;
   onOffline: (userId: string) => void;
+  onSuspended: (user: User) => void;
+  onRoleChanged: (user: User) => void;
 }) {
   if (users.length === 0) {
     return <p className="text-sm text-stone-600">利用者はまだいません。</p>;
@@ -37,8 +43,22 @@ export function UserTable({
             <tr key={user.id} className="border-t border-stone-100 align-top">
               <td className="px-3 py-3">{user.name}</td>
               <td className="px-3 py-3">{user.email}</td>
-              <td className="px-3 py-3">{roleLabel(user.role)}</td>
-              <td className="px-3 py-3">{accountStatusLabel(user.status)}</td>
+              <td className="px-3 py-3">
+                <div className="space-y-2">
+                  <div>{roleLabel(user.role)}</div>
+                  {user.id !== selfId && (
+                    <ChangeRole user={user} customers={customers} onChanged={onRoleChanged} />
+                  )}
+                </div>
+              </td>
+              <td className="px-3 py-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span>{accountStatusLabel(user.status)}</span>
+                  {user.status === "active" && user.id !== selfId && (
+                    <SuspendButton userId={user.id} onSuspended={onSuspended} />
+                  )}
+                </div>
+              </td>
               <td className="px-3 py-3">
                 {user.role === "applicant" && (
                   <LinkCustomer user={user} customers={customers} onLinked={onLinked} />
@@ -126,6 +146,105 @@ function AgentOffline({ userId, status, onOffline }: { userId: string; status: s
         }}
       >
         離席にする
+      </button>
+      <ErrorText message={error} />
+    </div>
+  );
+}
+
+function SuspendButton({ userId, onSuspended }: { userId: string; onSuspended: (user: User) => void }) {
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        className={quietButtonClass}
+        disabled={pending}
+        onClick={() => {
+          setPending(true);
+          setError("");
+          api<User>(`/api/users/${userId}/suspend`, { method: "POST" })
+            .then(onSuspended)
+            .catch((err: unknown) => setError(err instanceof ApiError ? err.message : "利用者を停止できませんでした。しばらくしてから、もう一度試してください"))
+            .finally(() => setPending(false));
+        }}
+      >
+        {pending ? "停止しています" : "停止する"}
+      </button>
+      <ErrorText message={error} />
+    </div>
+  );
+}
+
+function ChangeRole({
+  user,
+  customers,
+  onChanged,
+}: {
+  user: User;
+  customers: Customer[];
+  onChanged: (user: User) => void;
+}) {
+  const [role, setRole] = useState("");
+  const [customerId, setCustomerId] = useState("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  const choices = [
+    ["applicant", "申請者"],
+    ["agent", "担当者"],
+    ["admin", "管理者"],
+  ].filter(([value]) => value !== user.role);
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <select
+        className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"
+        value={role}
+        onChange={(event) => setRole(event.target.value)}
+      >
+        <option value="">役割を選ぶ</option>
+        {choices.map(([value, label]) => (
+          <option key={value} value={value}>
+            {label}
+          </option>
+        ))}
+      </select>
+      {role === "applicant" && (
+        <select
+          className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm"
+          value={customerId}
+          onChange={(event) => setCustomerId(event.target.value)}
+        >
+          <option value="">顧客を選ぶ</option>
+          {customers.map((customer) => (
+            <option key={customer.id} value={customer.id}>
+              {customer.name}
+            </option>
+          ))}
+        </select>
+      )}
+      <button
+        type="button"
+        className={quietButtonClass}
+        disabled={pending || !role || (role === "applicant" && !customerId)}
+        onClick={() => {
+          setPending(true);
+          setError("");
+          api<User>(`/api/users/${user.id}/role`, {
+            method: "PATCH",
+            body: JSON.stringify({ role, customer_id: role === "applicant" ? customerId : "" }),
+          })
+            .then((changed) => {
+              setRole("");
+              setCustomerId("");
+              onChanged(changed);
+            })
+            .catch((err: unknown) => setError(err instanceof ApiError ? err.message : "役割を変えられませんでした。しばらくしてから、もう一度試してください"))
+            .finally(() => setPending(false));
+        }}
+      >
+        {pending ? "変えています" : "役割を変える"}
       </button>
       <ErrorText message={error} />
     </div>

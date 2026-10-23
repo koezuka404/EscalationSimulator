@@ -25,11 +25,17 @@ type client struct {
 	role   entity.Role
 }
 
+type closeUserRequest struct {
+	userID string
+	done   chan struct{}
+}
+
 type Hub struct {
 	clients    map[*client]struct{}
 	register   chan *client
 	unregister chan *client
 	broadcast  chan usecase.Message
+	closeUser  chan closeUserRequest
 	current    *usecase.CurrentUser
 	snapshot   *usecase.QueueSnapshot
 	dashboard  *usecase.ShowDashboard
@@ -44,6 +50,7 @@ func NewHub(current *usecase.CurrentUser, snapshot *usecase.QueueSnapshot, dashb
 		register:   make(chan *client),
 		unregister: make(chan *client),
 		broadcast:  make(chan usecase.Message, 32),
+		closeUser:  make(chan closeUserRequest),
 		current:    current,
 		snapshot:   snapshot,
 		dashboard:  dashboard,
@@ -86,7 +93,29 @@ func (h *Hub) Run() {
 					log.Printf("画面への知らせを届けられなかったため、接続を切りました。user_id=%s", client.userID)
 				}
 			}
+		case request := <-h.closeUser:
+			h.dropUser(request.userID)
+			close(request.done)
 		}
+	}
+}
+
+//指定した利用者の画面の接続を切る
+func (h *Hub) CloseUser(userID string) {
+	if userID == "" {
+		return
+	}
+	done := make(chan struct{})
+	h.closeUser <- closeUserRequest{userID: userID, done: done}
+	<-done
+}
+
+func (h *Hub) dropUser(userID string) {
+	for client := range h.clients {
+		if client.userID != userID {
+			continue
+		}
+		h.removeClient(client)
 	}
 }
 

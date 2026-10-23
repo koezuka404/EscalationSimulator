@@ -2,12 +2,17 @@ package usecase
 
 import (
 	"context"
+	"log"
 	"time"
 
 	"escalator/entity"
 	"escalator/repository"
 	"escalator/usecase/crypto"
 )
+
+type ScreenConnection interface {
+	CloseUser(userID string)
+}
 
 type Refresh struct {
 	users      repository.UserRepository
@@ -17,9 +22,10 @@ type Refresh struct {
 	audience   string
 	accessTTL  time.Duration
 	refreshTTL time.Duration
+	screens    ScreenConnection
 }
 
-func NewRefresh(users repository.UserRepository, sessions repository.SessionRepository, secret []byte, issuer, audience string, accessTTL, refreshTTL time.Duration) *Refresh {
+func NewRefresh(users repository.UserRepository, sessions repository.SessionRepository, secret []byte, issuer, audience string, accessTTL, refreshTTL time.Duration, screens ScreenConnection) *Refresh {
 	return &Refresh{
 		users:      users,
 		sessions:   sessions,
@@ -28,10 +34,11 @@ func NewRefresh(users repository.UserRepository, sessions repository.SessionRepo
 		audience:   audience,
 		accessTTL:  accessTTL,
 		refreshTTL: refreshTTL,
+		screens:    screens,
 	}
 }
 
-//再ログイン用の印を新しい印に替え、ログイン用トークンを出し直す
+//再ログイン用の印を新しい印に替え、使い回しを見つけたら画面の接続を切る
 func (r *Refresh) Execute(ctx context.Context, refreshToken string) (LoginResult, error) {
 	if refreshToken == "" {
 		return LoginResult{}, entity.ErrInvalidRefresh
@@ -56,6 +63,10 @@ func (r *Refresh) Execute(ctx context.Context, refreshToken string) (LoginResult
 		if err := r.users.BumpAuthVersion(ctx, userID); err != nil {
 			return LoginResult{}, err
 		}
+		if r.screens != nil {
+			r.screens.CloseUser(userID)
+		}
+		log.Printf("使い回された印を見つけたため、その人の画面の接続を切りました。user_id=%s", userID)
 		return LoginResult{}, entity.ErrInvalidRefresh
 	}
 	user, err := r.users.FindByID(ctx, userID)

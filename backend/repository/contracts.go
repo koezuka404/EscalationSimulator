@@ -21,6 +21,8 @@ type UserRepository interface {
 	FindByEmail(ctx context.Context, email string) (entity.User, error)
 	UpdateLoginState(ctx context.Context, user entity.User) error
 	UpdateCustomer(ctx context.Context, user entity.User) error
+	UpdateStatus(ctx context.Context, user entity.User) error
+	UpdateRole(ctx context.Context, user entity.User) error
 	BumpAuthVersion(ctx context.Context, id string) error
 	ListNames(ctx context.Context, ids []string) (map[string]string, error)
 	ListApplicants(ctx context.Context) ([]entity.User, error)

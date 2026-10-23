@@ -11,13 +11,15 @@ import (
 )
 
 type UserAPI struct {
-	link   *usecase.LinkApplicant
-	create *usecase.CreateAgent
-	list   *usecase.ListUsers
+	link    *usecase.LinkApplicant
+	create  *usecase.CreateAgent
+	list    *usecase.ListUsers
+	suspend *usecase.SuspendUser
+	role    *usecase.ChangeRole
 }
 
-func NewUserAPI(link *usecase.LinkApplicant, create *usecase.CreateAgent, list *usecase.ListUsers) *UserAPI {
-	return &UserAPI{link: link, create: create, list: list}
+func NewUserAPI(link *usecase.LinkApplicant, create *usecase.CreateAgent, list *usecase.ListUsers, suspend *usecase.SuspendUser, role *usecase.ChangeRole) *UserAPI {
+	return &UserAPI{link: link, create: create, list: list, suspend: suspend, role: role}
 }
 
 //利用者の一覧を返す
@@ -57,6 +59,33 @@ func (a *UserAPI) LinkCustomer(c echo.Context) error {
 		return writeLinkError(c, err)
 	}
 	return c.JSON(http.StatusOK, toUserJSON(user))
+}
+
+//利用者の停止を受ける
+func (a *UserAPI) Suspend(c echo.Context) error {
+	user, err := a.suspend.Execute(c.Request().Context(), c.Request().Header.Get("Authorization"), c.Param("id"))
+	if err != nil {
+		return writeSuspendError(c, err)
+	}
+	return c.JSON(http.StatusOK, toUserJSON(user))
+}
+
+//利用者の役割の変更を受ける
+func (a *UserAPI) ChangeRole(c echo.Context) error {
+	var body changeRoleJSON
+	if err := c.Bind(&body); err != nil {
+		return c.JSON(http.StatusBadRequest, messageJSON{Message: "送られた内容を読み取れませんでした。役割を選んでください"})
+	}
+	user, err := a.role.Execute(c.Request().Context(), c.Request().Header.Get("Authorization"), c.Param("id"), body.Role, body.CustomerID)
+	if err != nil {
+		return writeRoleError(c, err)
+	}
+	return c.JSON(http.StatusOK, toUserJSON(user))
+}
+
+type changeRoleJSON struct {
+	Role       string `json:"role"`
+	CustomerID string `json:"customer_id"`
 }
 
 type linkCustomerJSON struct {
@@ -103,5 +132,37 @@ func writeLinkError(c echo.Context, err error) error {
 		return c.JSON(http.StatusBadRequest, messageJSON{Message: err.Error()})
 	default:
 		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "申請者を顧客に結びつけられませんでした。しばらくしてから、もう一度試してください"})
+	}
+}
+
+func writeSuspendError(c echo.Context, err error) error {
+	switch {
+	case errors.Is(err, entity.ErrUnauthenticated):
+		return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})
+	case errors.Is(err, entity.ErrForbidden), errors.Is(err, entity.ErrSuspendSelf):
+		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
+	case errors.Is(err, entity.ErrUserNotFound):
+		return c.JSON(http.StatusNotFound, messageJSON{Message: err.Error()})
+	case errors.Is(err, entity.ErrAlreadySuspended):
+		return c.JSON(http.StatusConflict, messageJSON{Message: err.Error()})
+	default:
+		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "利用者を停止できませんでした。しばらくしてから、もう一度試してください"})
+	}
+}
+
+func writeRoleError(c echo.Context, err error) error {
+	switch {
+	case errors.Is(err, entity.ErrUnauthenticated):
+		return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})
+	case errors.Is(err, entity.ErrForbidden), errors.Is(err, entity.ErrChangeOwnRole):
+		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
+	case errors.Is(err, entity.ErrUserNotFound), errors.Is(err, entity.ErrCustomerNotFound):
+		return c.JSON(http.StatusNotFound, messageJSON{Message: err.Error()})
+	case errors.Is(err, entity.ErrInvalidRole), errors.Is(err, entity.ErrApplicantNeedsCustomer):
+		return c.JSON(http.StatusBadRequest, messageJSON{Message: err.Error()})
+	case errors.Is(err, entity.ErrRoleSame):
+		return c.JSON(http.StatusConflict, messageJSON{Message: err.Error()})
+	default:
+		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "役割を変えられませんでした。しばらくしてから、もう一度試してください"})
 	}
 }

@@ -83,11 +83,6 @@ func main() {
 	current := usecase.NewCurrentUser(users, []byte(cfg.JWTSecret), cfg.JWTIssuer, cfg.JWTAudience)
 	requireLogin := middleware.RequireLogin(current.Execute)
 	router.Me(e, controller.NewMeAPI(current), requireLogin)
-	router.Users(e, controller.NewUserAPI(
-		usecase.NewLinkApplicant(users, customers, current),
-		usecase.NewCreateAgent(users, current, cfg.BcryptCost),
-		usecase.NewListUsers(users, current),
-	), requireLogin)
 	tickets := repository.NewTicketRepository(conn)
 	statuses := repository.NewAgentStatusRepository(conn)
 	dashboard := usecase.NewShowDashboard(tickets, customers, statuses, current)
@@ -95,6 +90,13 @@ func main() {
 	dashboard.SetNotifier(notices)
 	go notices.Run()
 	router.Live(e, notices)
+	router.Users(e, controller.NewUserAPI(
+		usecase.NewLinkApplicant(users, customers, current),
+		usecase.NewCreateAgent(users, current, cfg.BcryptCost),
+		usecase.NewListUsers(users, current),
+		usecase.NewSuspendUser(users, current, notices),
+		usecase.NewChangeRole(users, customers, current),
+	), requireLogin)
 	jobCtx, stopJob := context.WithCancel(context.Background())
 	defer stopJob()
 	createTicket := usecase.NewCreateTicket(tickets, customers, current, order, notices)
@@ -135,7 +137,7 @@ func main() {
 		usecase.NewSignUp(users, cfg.BcryptCost),
 		usecase.NewLogIn(users, sessions, []byte(cfg.JWTSecret), cfg.JWTIssuer, cfg.JWTAudience, cfg.AccessTokenTTL, cfg.RefreshTokenTTL, cfg.LoginMaxFailures, cfg.LoginLock),
 		usecase.NewLogOut(sessions),
-		usecase.NewRefresh(users, sessions, []byte(cfg.JWTSecret), cfg.JWTIssuer, cfg.JWTAudience, cfg.AccessTokenTTL, cfg.RefreshTokenTTL),
+		usecase.NewRefresh(users, sessions, []byte(cfg.JWTSecret), cfg.JWTIssuer, cfg.JWTAudience, cfg.AccessTokenTTL, cfg.RefreshTokenTTL, notices),
 		cfg.RefreshTokenCookieName,
 		cfg.CSRFTokenCookieName,
 		cfg.CookieSecure,

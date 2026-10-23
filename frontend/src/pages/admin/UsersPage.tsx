@@ -3,10 +3,12 @@ import { ApiError, api } from "../../api/client";
 import type { Customer, User } from "../../api/types";
 import { UserTable } from "../../components/admin/UserTable";
 import { buttonClass, ErrorText, fieldClass, PageFrame } from "../../components/common/PageFrame";
+import { useAuth } from "../../auth/AuthProvider";
 import { useLive } from "../../websocket/connection";
 
 export function UsersPage() {
   const live = useLive();
+  const { user: self } = useAuth();
   const [users, setUsers] = useState<User[] | null>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [error, setError] = useState("");
@@ -80,8 +82,11 @@ export function UsersPage() {
           users={users}
           customers={customers}
           availability={availability}
+          selfId={self?.id ?? ""}
           onLinked={(user) => setUsers((current) => current?.map((item) => (item.id === user.id ? user : item)) ?? [user])}
           onOffline={(userId) => live.markAvailability(userId, "offline")}
+          onSuspended={(user) => setUsers((current) => current?.map((item) => (item.id === user.id ? user : item)) ?? [user])}
+          onRoleChanged={(user) => setUsers((current) => current?.map((item) => (item.id === user.id ? user : item)) ?? [user])}
         />
       )}
     </PageFrame>

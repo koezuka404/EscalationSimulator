@@ -134,6 +134,42 @@ func (r *userRepository) UpdateCustomer(ctx context.Context, user entity.User) e
 	return nil
 }
 
+//利用者の状態と認証の版を保存する
+func (r *userRepository) UpdateStatus(ctx context.Context, user entity.User) error {
+	result := r.db.WithContext(ctx).Model(&userRow{}).Where("id = ?", user.ID).Updates(map[string]any{
+		"status":       string(user.Status),
+		"auth_version": user.AuthVersion,
+	})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return entity.ErrUserNotFound
+	}
+	return nil
+}
+
+//役割と所属顧客と認証の版を保存し、担当者に稼働がなければ待機中を作る
+func (r *userRepository) UpdateRole(ctx context.Context, user entity.User) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		result := tx.Model(&userRow{}).Where("id = ?", user.ID).Updates(map[string]any{
+			"role":         string(user.Role),
+			"customer_id":  user.CustomerID,
+			"auth_version": user.AuthVersion,
+		})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return entity.ErrUserNotFound
+		}
+		if user.Role != entity.RoleAgent {
+			return nil
+		}
+		return ensureAgentAvailable(tx, user.ID)
+	})
+}
+
 //削除済み以外の利用者を名前順で返す
 func (r *userRepository) List(ctx context.Context) ([]entity.User, error) {
 	var rows []userRow
