@@ -13,6 +13,7 @@ export function UserTable({
   onOffline,
   onSuspended,
   onResumed,
+  onDeleted,
   onRoleChanged,
 }: {
   users: User[];
@@ -23,6 +24,7 @@ export function UserTable({
   onOffline: (userId: string) => void;
   onSuspended: (user: User) => void;
   onResumed: (user: User) => void;
+  onDeleted: (userId: string) => void;
   onRoleChanged: (user: User) => void;
 }) {
   if (users.length === 0) {
@@ -61,6 +63,9 @@ export function UserTable({
                   )}
                   {user.status === "suspended" && user.id !== selfId && (
                     <ResumeButton userId={user.id} onResumed={onResumed} />
+                  )}
+                  {user.status === "suspended" && user.id !== selfId && (
+                    <DeleteButton userId={user.id} onDeleted={onDeleted} />
                   )}
                 </div>
               </td>
@@ -201,6 +206,31 @@ function ResumeButton({ userId, onResumed }: { userId: string; onResumed: (user:
         }}
       >
         {pending ? "戻しています" : "利用中に戻す"}
+      </button>
+      <ErrorText message={error} />
+    </div>
+  );
+}
+
+function DeleteButton({ userId, onDeleted }: { userId: string; onDeleted: (userId: string) => void }) {
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        className={quietButtonClass}
+        disabled={pending}
+        onClick={() => {
+          setPending(true);
+          setError("");
+          api<User>(`/api/users/${userId}/delete`, { method: "POST" })
+            .then(() => onDeleted(userId))
+            .catch((err: unknown) => setError(err instanceof ApiError ? err.message : "利用者を削除できませんでした。しばらくしてから、もう一度試してください"))
+            .finally(() => setPending(false));
+        }}
+      >
+        {pending ? "削除しています" : "削除する"}
       </button>
       <ErrorText message={error} />
     </div>

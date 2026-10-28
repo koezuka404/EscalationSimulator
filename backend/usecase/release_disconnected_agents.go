@@ -62,7 +62,7 @@ func (r *ReleaseDisconnectedAgents) releaseOne(ctx context.Context, id string) e
 		}
 		return err
 	}
-	if user.Role != entity.RoleAgent {
+	if user.Status == entity.StatusDeleted || user.Role != entity.RoleAgent {
 		r.presence.ForgetGone(id)
 		return nil
 	}

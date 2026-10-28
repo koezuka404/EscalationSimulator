@@ -23,6 +23,7 @@ type UserRepository interface {
 	UpdateCustomer(ctx context.Context, user entity.User) error
 	UpdateStatus(ctx context.Context, user entity.User) error
 	UpdateRole(ctx context.Context, user entity.User) error
+	MarkDeleted(ctx context.Context, user entity.User) error
 	BumpAuthVersion(ctx context.Context, id string) error
 	ListNames(ctx context.Context, ids []string) (map[string]string, error)
 	ListApplicants(ctx context.Context) ([]entity.User, error)

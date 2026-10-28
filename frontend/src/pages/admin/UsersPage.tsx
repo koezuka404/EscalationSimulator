@@ -87,6 +87,7 @@ export function UsersPage() {
           onOffline={(userId) => live.markAvailability(userId, "offline")}
           onSuspended={(user) => setUsers((current) => current?.map((item) => (item.id === user.id ? user : item)) ?? [user])}
           onResumed={(user) => setUsers((current) => current?.map((item) => (item.id === user.id ? user : item)) ?? [user])}
+          onDeleted={(userId) => setUsers((current) => current?.filter((item) => item.id !== userId) ?? [])}
           onRoleChanged={(user) => setUsers((current) => current?.map((item) => (item.id === user.id ? user : item)) ?? [user])}
         />
       )}

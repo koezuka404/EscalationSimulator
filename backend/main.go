@@ -96,7 +96,8 @@ func main() {
 		usecase.NewListUsers(users, current),
 		usecase.NewSuspendUser(users, current, notices),
 		usecase.NewResumeUser(users, current),
-		usecase.NewChangeRole(users, customers, current),
+		usecase.NewDeleteUser(users, customers, statuses, order, current, notices),
+		usecase.NewChangeRole(users, customers, statuses, order, current, notices),
 	), requireLogin)
 	jobCtx, stopJob := context.WithCancel(context.Background())
 	defer stopJob()

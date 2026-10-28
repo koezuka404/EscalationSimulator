@@ -40,6 +40,7 @@ var (
 	ErrAlreadySuspended       = errors.New("この利用者はすでに停止しています")
 	ErrSuspendSelf            = errors.New("自分のアカウントは停止できません")
 	ErrAlreadyActive          = errors.New("この利用者はすでに利用中です")
+	ErrDeleteOnlySuspended    = errors.New("削除できるのは、停止している利用者だけです")
 	ErrInvalidRole            = errors.New("役割は申請者、担当者、管理者のどれかを選んでください")
 	ErrRoleSame               = errors.New("役割は今と違うものを選んでください")
 	ErrApplicantNeedsCustomer = errors.New("申請者にするときは、所属する顧客を選んでください")
@@ -177,6 +178,20 @@ func (u User) Resume() (User, error) {
 		return User{}, ErrUserNotFound
 	}
 	u.Status = StatusActive
+	u.AuthVersion++
+	return u, nil
+}
+
+//停止中の利用者を削除し、メールアドレスを匿名化して認証の版を上げる
+func (u User) Delete() (User, error) {
+	if u.Status == StatusDeleted || u.ID == "" {
+		return User{}, ErrUserNotFound
+	}
+	if u.Status != StatusSuspended {
+		return User{}, ErrDeleteOnlySuspended
+	}
+	u.Status = StatusDeleted
+	u.Email = "deleted." + u.ID + "@deleted.invalid"
 	u.AuthVersion++
 	return u, nil
 }

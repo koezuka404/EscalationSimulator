@@ -16,11 +16,12 @@ type UserAPI struct {
 	list    *usecase.ListUsers
 	suspend *usecase.SuspendUser
 	resume  *usecase.ResumeUser
+	remove  *usecase.DeleteUser
 	role    *usecase.ChangeRole
 }
 
-func NewUserAPI(link *usecase.LinkApplicant, create *usecase.CreateAgent, list *usecase.ListUsers, suspend *usecase.SuspendUser, resume *usecase.ResumeUser, role *usecase.ChangeRole) *UserAPI {
-	return &UserAPI{link: link, create: create, list: list, suspend: suspend, resume: resume, role: role}
+func NewUserAPI(link *usecase.LinkApplicant, create *usecase.CreateAgent, list *usecase.ListUsers, suspend *usecase.SuspendUser, resume *usecase.ResumeUser, remove *usecase.DeleteUser, role *usecase.ChangeRole) *UserAPI {
+	return &UserAPI{link: link, create: create, list: list, suspend: suspend, resume: resume, remove: remove, role: role}
 }
 
 //利用者の一覧を返す
@@ -76,6 +77,15 @@ func (a *UserAPI) Resume(c echo.Context) error {
 	user, err := a.resume.Execute(c.Request().Context(), c.Request().Header.Get("Authorization"), c.Param("id"))
 	if err != nil {
 		return writeResumeError(c, err)
+	}
+	return c.JSON(http.StatusOK, toUserJSON(user))
+}
+
+//利用者の削除を受ける
+func (a *UserAPI) Delete(c echo.Context) error {
+	user, err := a.remove.Execute(c.Request().Context(), c.Request().Header.Get("Authorization"), c.Param("id"))
+	if err != nil {
+		return writeDeleteError(c, err)
 	}
 	return c.JSON(http.StatusOK, toUserJSON(user))
 }
@@ -172,6 +182,21 @@ func writeResumeError(c echo.Context, err error) error {
 		return c.JSON(http.StatusConflict, messageJSON{Message: err.Error()})
 	default:
 		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "利用者を利用中に戻せませんでした。しばらくしてから、もう一度試してください"})
+	}
+}
+
+func writeDeleteError(c echo.Context, err error) error {
+	switch {
+	case errors.Is(err, entity.ErrUnauthenticated):
+		return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})
+	case errors.Is(err, entity.ErrForbidden):
+		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
+	case errors.Is(err, entity.ErrUserNotFound):
+		return c.JSON(http.StatusNotFound, messageJSON{Message: err.Error()})
+	case errors.Is(err, entity.ErrDeleteOnlySuspended):
+		return c.JSON(http.StatusConflict, messageJSON{Message: err.Error()})
+	default:
+		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "利用者を削除できませんでした。しばらくしてから、もう一度試してください"})
 	}
 }
 

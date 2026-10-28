@@ -149,7 +149,7 @@ func (r *userRepository) UpdateStatus(ctx context.Context, user entity.User) err
 	return nil
 }
 
-//役割と所属顧客と認証の版を保存し、担当者に稼働がなければ待機中を作る
+//役割と所属顧客と認証の版を保存し、担当者には稼働を作り、申請者にしたときは稼働を消す
 func (r *userRepository) UpdateRole(ctx context.Context, user entity.User) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		result := tx.Model(&userRow{}).Where("id = ?", user.ID).Updates(map[string]any{
@@ -163,10 +163,31 @@ func (r *userRepository) UpdateRole(ctx context.Context, user entity.User) error
 		if result.RowsAffected == 0 {
 			return entity.ErrUserNotFound
 		}
-		if user.Role != entity.RoleAgent {
-			return nil
+		if user.Role == entity.RoleAgent {
+			return ensureAgentAvailable(tx, user.ID)
 		}
-		return ensureAgentAvailable(tx, user.ID)
+		if user.Role == entity.RoleApplicant {
+			return tx.Where("user_id = ?", user.ID).Delete(&agentStatusRow{}).Error
+		}
+		return nil
+	})
+}
+
+//利用者を削除済みにし、メールアドレスと認証の版を保存し、稼働の記録を消す
+func (r *userRepository) MarkDeleted(ctx context.Context, user entity.User) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		result := tx.Model(&userRow{}).Where("id = ? AND status = ?", user.ID, string(entity.StatusSuspended)).Updates(map[string]any{
+			"email":        user.Email,
+			"status":       string(user.Status),
+			"auth_version": user.AuthVersion,
+		})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return entity.ErrUserNotFound
+		}
+		return tx.Where("user_id = ?", user.ID).Delete(&agentStatusRow{}).Error
 	})
 }
 

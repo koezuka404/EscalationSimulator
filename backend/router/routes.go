@@ -23,6 +23,7 @@ func Users(e *echo.Echo, api *controller.UserAPI, require echo.MiddlewareFunc) {
 	e.PATCH("/api/users/:id", api.LinkCustomer, require)
 	e.POST("/api/users/:id/suspend", api.Suspend, require)
 	e.POST("/api/users/:id/resume", api.Resume, require)
+	e.POST("/api/users/:id/delete", api.Delete, require)
 	e.PATCH("/api/users/:id/role", api.ChangeRole, require)
 }
 
