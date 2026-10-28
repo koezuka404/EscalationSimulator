@@ -95,6 +95,7 @@ func main() {
 		usecase.NewCreateAgent(users, current, cfg.BcryptCost),
 		usecase.NewListUsers(users, current),
 		usecase.NewSuspendUser(users, current, notices),
+		usecase.NewResumeUser(users, current),
 		usecase.NewChangeRole(users, customers, current),
 	), requireLogin)
 	jobCtx, stopJob := context.WithCancel(context.Background())

@@ -15,11 +15,12 @@ type UserAPI struct {
 	create  *usecase.CreateAgent
 	list    *usecase.ListUsers
 	suspend *usecase.SuspendUser
+	resume  *usecase.ResumeUser
 	role    *usecase.ChangeRole
 }
 
-func NewUserAPI(link *usecase.LinkApplicant, create *usecase.CreateAgent, list *usecase.ListUsers, suspend *usecase.SuspendUser, role *usecase.ChangeRole) *UserAPI {
-	return &UserAPI{link: link, create: create, list: list, suspend: suspend, role: role}
+func NewUserAPI(link *usecase.LinkApplicant, create *usecase.CreateAgent, list *usecase.ListUsers, suspend *usecase.SuspendUser, resume *usecase.ResumeUser, role *usecase.ChangeRole) *UserAPI {
+	return &UserAPI{link: link, create: create, list: list, suspend: suspend, resume: resume, role: role}
 }
 
 //利用者の一覧を返す
@@ -66,6 +67,15 @@ func (a *UserAPI) Suspend(c echo.Context) error {
 	user, err := a.suspend.Execute(c.Request().Context(), c.Request().Header.Get("Authorization"), c.Param("id"))
 	if err != nil {
 		return writeSuspendError(c, err)
+	}
+	return c.JSON(http.StatusOK, toUserJSON(user))
+}
+
+//利用者を利用中に戻す
+func (a *UserAPI) Resume(c echo.Context) error {
+	user, err := a.resume.Execute(c.Request().Context(), c.Request().Header.Get("Authorization"), c.Param("id"))
+	if err != nil {
+		return writeResumeError(c, err)
 	}
 	return c.JSON(http.StatusOK, toUserJSON(user))
 }
@@ -147,6 +157,21 @@ func writeSuspendError(c echo.Context, err error) error {
 		return c.JSON(http.StatusConflict, messageJSON{Message: err.Error()})
 	default:
 		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "利用者を停止できませんでした。しばらくしてから、もう一度試してください"})
+	}
+}
+
+func writeResumeError(c echo.Context, err error) error {
+	switch {
+	case errors.Is(err, entity.ErrUnauthenticated):
+		return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})
+	case errors.Is(err, entity.ErrForbidden):
+		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
+	case errors.Is(err, entity.ErrUserNotFound):
+		return c.JSON(http.StatusNotFound, messageJSON{Message: err.Error()})
+	case errors.Is(err, entity.ErrAlreadyActive):
+		return c.JSON(http.StatusConflict, messageJSON{Message: err.Error()})
+	default:
+		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "利用者を利用中に戻せませんでした。しばらくしてから、もう一度試してください"})
 	}
 }
 

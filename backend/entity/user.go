@@ -39,6 +39,7 @@ var (
 	ErrCustomerLink           = errors.New("結びつける顧客を選んでください")
 	ErrAlreadySuspended       = errors.New("この利用者はすでに停止しています")
 	ErrSuspendSelf            = errors.New("自分のアカウントは停止できません")
+	ErrAlreadyActive          = errors.New("この利用者はすでに利用中です")
 	ErrInvalidRole            = errors.New("役割は申請者、担当者、管理者のどれかを選んでください")
 	ErrRoleSame               = errors.New("役割は今と違うものを選んでください")
 	ErrApplicantNeedsCustomer = errors.New("申請者にするときは、所属する顧客を選んでください")
@@ -160,6 +161,22 @@ func (u User) Suspend() (User, error) {
 		return User{}, ErrAlreadySuspended
 	}
 	u.Status = StatusSuspended
+	u.AuthVersion++
+	return u, nil
+}
+
+//停止中の利用者を利用中に戻し、認証の版を上げる
+func (u User) Resume() (User, error) {
+	if u.Status == StatusDeleted {
+		return User{}, ErrUserNotFound
+	}
+	if u.Status == StatusActive {
+		return User{}, ErrAlreadyActive
+	}
+	if u.Status != StatusSuspended {
+		return User{}, ErrUserNotFound
+	}
+	u.Status = StatusActive
 	u.AuthVersion++
 	return u, nil
 }

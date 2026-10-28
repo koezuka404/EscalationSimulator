@@ -86,6 +86,7 @@ export function UsersPage() {
           onLinked={(user) => setUsers((current) => current?.map((item) => (item.id === user.id ? user : item)) ?? [user])}
           onOffline={(userId) => live.markAvailability(userId, "offline")}
           onSuspended={(user) => setUsers((current) => current?.map((item) => (item.id === user.id ? user : item)) ?? [user])}
+          onResumed={(user) => setUsers((current) => current?.map((item) => (item.id === user.id ? user : item)) ?? [user])}
           onRoleChanged={(user) => setUsers((current) => current?.map((item) => (item.id === user.id ? user : item)) ?? [user])}
         />
       )}
