@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { ApiError, api } from "../../api/client";
 import type { Customer } from "../../api/types";
-import { CustomerForm } from "../../components/admin/CustomerForm";
+import { CustomerForm, NewCustomerForm } from "../../components/admin/CustomerForm";
 import { ErrorText, PageFrame } from "../../components/common/PageFrame";
 
 export function CustomersPage() {
@@ -17,6 +17,9 @@ export function CustomersPage() {
   return (
     <PageFrame title="顧客">
       <p className="mb-4 text-sm text-stone-600">名前、プラン、初回対応の約束時間を変えられます。変えたあとの新規起票と、対応待ちの点数のやり直しから効きます。</p>
+      <NewCustomerForm
+        onCreated={(customer) => setCustomers((current) => (current ? [...current, customer] : [customer]))}
+      />
       <ErrorText message={error} />
       {customers === null && !error && <p className="text-sm text-stone-600">読み込んでいます。</p>}
       <div className="space-y-4">

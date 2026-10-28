@@ -31,6 +31,19 @@ func (a *CustomerAPI) List(c echo.Context) error {
 	return c.JSON(http.StatusOK, body)
 }
 
+//顧客の登録を受ける
+func (a *CustomerAPI) Create(c echo.Context) error {
+	var body updateCustomerJSON
+	if err := c.Bind(&body); err != nil {
+		return c.JSON(http.StatusBadRequest, messageJSON{Message: "送られた内容を読み取れませんでした。顧客名、プラン、目標時間を入力してください"})
+	}
+	customer, err := a.customers.Create(c.Request().Context(), body.Name, entity.Plan(body.Plan), body.SLAMinutes)
+	if err != nil {
+		return writeCustomerError(c, err)
+	}
+	return c.JSON(http.StatusCreated, toCustomerJSON(customer))
+}
+
 //顧客の名前、プラン、目標時間を更新する
 func (a *CustomerAPI) Update(c echo.Context) error {
 	var body updateCustomerJSON

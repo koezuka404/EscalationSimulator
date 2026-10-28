@@ -20,6 +20,15 @@ func (c *Customers) List(ctx context.Context) ([]entity.Customer, error) {
 	return c.repo.List(ctx)
 }
 
+//顧客を登録する
+func (c *Customers) Create(ctx context.Context, name string, plan entity.Plan, slaMinutes int) (entity.Customer, error) {
+	customer, err := entity.NewCustomer(name, plan, slaMinutes)
+	if err != nil {
+		return entity.Customer{}, err
+	}
+	return c.repo.Save(ctx, customer)
+}
+
 //顧客の名前、プラン、目標時間を更新する
 func (c *Customers) Update(ctx context.Context, id, name string, plan entity.Plan, slaMinutes int) (entity.Customer, error) {
 	if _, err := c.repo.FindByID(ctx, id); err != nil {

@@ -14,6 +14,7 @@ func Health(e *echo.Echo, api *controller.HealthAPI) {
 
 func Customers(e *echo.Echo, api *controller.CustomerAPI) {
 	e.GET("/admin/customers", api.List)
+	e.POST("/admin/customers", api.Create)
 	e.PUT("/admin/customers/:id", api.Update)
 }
 
