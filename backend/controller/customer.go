@@ -20,7 +20,7 @@ func NewCustomerAPI(customers *usecase.Customers) *CustomerAPI {
 
 //顧客の一覧を返す
 func (a *CustomerAPI) List(c echo.Context) error {
-	customers, err := a.customers.List(c.Request().Context())
+	customers, err := a.customers.List(c.Request().Context(), c.Request().Header.Get("Authorization"))
 	if err != nil {
 		return writeCustomerError(c, err)
 	}
@@ -37,7 +37,7 @@ func (a *CustomerAPI) Create(c echo.Context) error {
 	if err := c.Bind(&body); err != nil {
 		return c.JSON(http.StatusBadRequest, messageJSON{Message: "送られた内容を読み取れませんでした。顧客名、プラン、目標時間を入力してください"})
 	}
-	customer, err := a.customers.Create(c.Request().Context(), body.Name, entity.Plan(body.Plan), body.SLAMinutes)
+	customer, err := a.customers.Create(c.Request().Context(), c.Request().Header.Get("Authorization"), body.Name, entity.Plan(body.Plan), body.SLAMinutes)
 	if err != nil {
 		return writeCustomerError(c, err)
 	}
@@ -52,6 +52,7 @@ func (a *CustomerAPI) Update(c echo.Context) error {
 	}
 	customer, err := a.customers.Update(
 		c.Request().Context(),
+		c.Request().Header.Get("Authorization"),
 		c.Param("id"),
 		body.Name,
 		entity.Plan(body.Plan),
@@ -91,6 +92,10 @@ func toCustomerJSON(customer entity.Customer) customerJSON {
 
 func writeCustomerError(c echo.Context, err error) error {
 	switch {
+	case errors.Is(err, entity.ErrUnauthenticated):
+		return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})
+	case errors.Is(err, entity.ErrForbidden):
+		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
 	case errors.Is(err, entity.ErrCustomerNotFound):
 		return c.JSON(http.StatusNotFound, messageJSON{Message: err.Error()})
 	case errors.Is(err, entity.ErrInvalidCustomerName),

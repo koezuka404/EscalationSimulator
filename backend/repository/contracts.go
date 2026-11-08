@@ -28,6 +28,7 @@ type UserRepository interface {
 	ListNames(ctx context.Context, ids []string) (map[string]string, error)
 	ListApplicants(ctx context.Context) ([]entity.User, error)
 	List(ctx context.Context) ([]entity.User, error)
+	Count(ctx context.Context) (int, error)
 }
 
 type SessionRepository interface {

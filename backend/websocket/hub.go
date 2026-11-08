@@ -30,11 +30,16 @@ type closeUserRequest struct {
 	done   chan struct{}
 }
 
+type outbound struct {
+	role    entity.Role
+	message usecase.Message
+}
+
 type Hub struct {
 	clients    map[*client]struct{}
 	register   chan *client
 	unregister chan *client
-	broadcast  chan usecase.Message
+	broadcast  chan outbound
 	closeUser  chan closeUserRequest
 	current    *usecase.CurrentUser
 	snapshot   *usecase.QueueSnapshot
@@ -49,7 +54,7 @@ func NewHub(current *usecase.CurrentUser, snapshot *usecase.QueueSnapshot, dashb
 		clients:    make(map[*client]struct{}),
 		register:   make(chan *client),
 		unregister: make(chan *client),
-		broadcast:  make(chan usecase.Message, 32),
+		broadcast:  make(chan outbound, 32),
 		closeUser:  make(chan closeUserRequest),
 		current:    current,
 		snapshot:   snapshot,
@@ -81,13 +86,16 @@ func (h *Hub) Run() {
 			}
 		case client := <-h.unregister:
 			h.removeClient(client)
-		case message := <-h.broadcast:
+		case item := <-h.broadcast:
 			for client := range h.clients {
-				if !client.wants(message) {
+				if item.role != "" && client.role != item.role {
+					continue
+				}
+				if !client.wants(item.message) {
 					continue
 				}
 				select {
-				case client.send <- message.Body:
+				case client.send <- item.message.Body:
 				default:
 					h.removeClient(client)
 					log.Printf("画面への知らせを届けられなかったため、接続を切りました。user_id=%s", client.userID)
@@ -121,8 +129,16 @@ func (h *Hub) dropUser(userID string) {
 
 //保存が済んだあとの知らせを、つながっている画面へ届ける
 func (h *Hub) Send(message usecase.Message) {
+	h.enqueue(outbound{message: message})
+}
+
+func (h *Hub) deliver(role entity.Role, message usecase.Message) {
+	h.enqueue(outbound{role: role, message: message})
+}
+
+func (h *Hub) enqueue(item outbound) {
 	select {
-	case h.broadcast <- message:
+	case h.broadcast <- item:
 	default:
 		log.Printf("画面への知らせを届けられませんでした")
 	}

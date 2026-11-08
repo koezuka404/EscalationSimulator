@@ -12,10 +12,10 @@ func Health(e *echo.Echo, api *controller.HealthAPI) {
 	e.GET("/api/health", api.Show)
 }
 
-func Customers(e *echo.Echo, api *controller.CustomerAPI) {
-	e.GET("/admin/customers", api.List)
-	e.POST("/admin/customers", api.Create)
-	e.PUT("/admin/customers/:id", api.Update)
+func Customers(e *echo.Echo, api *controller.CustomerAPI, require echo.MiddlewareFunc) {
+	e.GET("/admin/customers", api.List, require)
+	e.POST("/admin/customers", api.Create, require)
+	e.PUT("/admin/customers/:id", api.Update, require)
 }
 
 func Users(e *echo.Echo, api *controller.UserAPI, require echo.MiddlewareFunc) {

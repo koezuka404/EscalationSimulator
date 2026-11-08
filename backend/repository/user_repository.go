@@ -191,6 +191,13 @@ func (r *userRepository) MarkDeleted(ctx context.Context, user entity.User) erro
 	})
 }
 
+//利用者の人数を返す
+func (r *userRepository) Count(ctx context.Context) (int, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&userRow{}).Count(&count).Error
+	return int(count), err
+}
+
 //削除済み以外の利用者を名前順で返す
 func (r *userRepository) List(ctx context.Context) ([]entity.User, error) {
 	var rows []userRow

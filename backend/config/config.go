@@ -41,6 +41,7 @@ type Config struct {
 	AgentDisconnectGrace     time.Duration
 	CORSAllowedOrigin        string
 	RedisPubSubChannelPrefix string
+	SampleUserPassword       string
 }
 
 func Load() (*Config, error) {
@@ -77,6 +78,7 @@ func LoadFromEnv(getenv func(string) string) (*Config, error) {
 		AgentDisconnectGrace:     time.Duration(intValue(getenv("AGENT_DISCONNECT_GRACE_SECONDS"), 300)) * time.Second,
 		CORSAllowedOrigin:        strings.TrimSpace(getenv("CORS_ALLOWED_ORIGIN")),
 		RedisPubSubChannelPrefix: valueOrDefault(getenv("REDIS_PUBSUB_CHANNEL_PREFIX"), "escalator:notify:"),
+		SampleUserPassword:       strings.TrimSpace(getenv("SAMPLE_USER_PASSWORD")),
 	}
 
 	if err := cfg.Validate(); err != nil {

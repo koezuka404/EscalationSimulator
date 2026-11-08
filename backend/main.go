@@ -53,6 +53,10 @@ func main() {
 		fmt.Fprintf(os.Stderr, "サンプルの顧客を登録できませんでした: %v\n", err)
 		os.Exit(1)
 	}
+	if err := seed.SeedUsersIfEmpty(context.Background(), repository.NewUserRepository(conn), repository.NewCustomerRepository(conn), cfg.SampleUserPassword, cfg.BcryptCost); err != nil {
+		fmt.Fprintf(os.Stderr, "サンプルの利用者を登録できませんでした: %v\n", err)
+		os.Exit(1)
+	}
 
 	order, err := redis.Open(cfg.RedisURL)
 	if err != nil {
@@ -79,15 +83,16 @@ func main() {
 		}
 		return userID, err
 	})
-	router.Customers(e, controller.NewCustomerAPI(usecase.NewCustomers(customers)))
 	current := usecase.NewCurrentUser(users, []byte(cfg.JWTSecret), cfg.JWTIssuer, cfg.JWTAudience)
 	requireLogin := middleware.RequireLogin(current.Execute)
+	router.Customers(e, controller.NewCustomerAPI(usecase.NewCustomers(customers, current)), requireLogin)
 	router.Me(e, controller.NewMeAPI(current), requireLogin)
 	tickets := repository.NewTicketRepository(conn)
 	statuses := repository.NewAgentStatusRepository(conn)
 	dashboard := usecase.NewShowDashboard(tickets, customers, statuses, current)
 	notices := websocket.NewHub(current, usecase.NewQueueSnapshot(tickets, customers, users, statuses), dashboard, cfg.CORSAllowedOrigin)
-	dashboard.SetNotifier(notices)
+	shared := websocket.NewRemoteNotices(notices, redis.NewBus(order), cfg.RedisPubSubChannelPrefix)
+	dashboard.SetNotifier(shared)
 	go notices.Run()
 	router.Live(e, notices)
 	router.Users(e, controller.NewUserAPI(
@@ -96,13 +101,14 @@ func main() {
 		usecase.NewListUsers(users, current),
 		usecase.NewSuspendUser(users, current, notices),
 		usecase.NewResumeUser(users, current),
-		usecase.NewDeleteUser(users, customers, statuses, order, current, notices),
-		usecase.NewChangeRole(users, customers, statuses, order, current, notices),
+		usecase.NewDeleteUser(users, customers, statuses, order, current, shared),
+		usecase.NewChangeRole(users, customers, statuses, order, current, shared),
 	), requireLogin)
 	jobCtx, stopJob := context.WithCancel(context.Background())
 	defer stopJob()
-	createTicket := usecase.NewCreateTicket(tickets, customers, current, order, notices)
-	demo := usecase.NewRunDemo(users, customers, repository.NewDemoRepository(conn), createTicket, notices, jobCtx)
+	go shared.Run(jobCtx)
+	createTicket := usecase.NewCreateTicket(tickets, customers, current, order, shared)
+	demo := usecase.NewRunDemo(users, customers, repository.NewDemoRepository(conn), createTicket, shared, jobCtx)
 	if err := demo.Recover(context.Background()); err != nil {
 		fmt.Fprintf(os.Stderr, "前回のデモを止めた状態にできませんでした: %v\n", err)
 		os.Exit(1)
@@ -112,26 +118,26 @@ func main() {
 	router.AdminTickets(e, controller.NewAdminTicketAPI(usecase.NewSearchTickets(tickets, customers, users, current)), requireLogin)
 	router.Tickets(e, controller.NewTicketAPI(
 		createTicket,
-		usecase.NewCloseTicket(tickets, order, current, notices),
-		usecase.NewChangeSeverity(tickets, customers, current, order, notices),
-		usecase.NewReturnTicketToQueue(tickets, customers, order, current, notices),
+		usecase.NewCloseTicket(tickets, order, current, shared),
+		usecase.NewChangeSeverity(tickets, customers, current, order, shared),
+		usecase.NewReturnTicketToQueue(tickets, customers, order, current, shared),
 		usecase.NewListMyTickets(tickets, customers, users, current),
 		usecase.NewShowTicket(tickets, customers, users, current),
 		usecase.NewAddWorkNote(tickets, current),
 	), limits, requireLogin)
-	router.Agent(e, controller.NewAgentAPI(usecase.NewChangeAgentStatus(users, customers, statuses, order, current, notices)), requireLogin)
+	router.Agent(e, controller.NewAgentAPI(usecase.NewChangeAgentStatus(users, customers, statuses, order, current, shared)), requireLogin)
 	router.Queue(e, controller.NewQueueAPI(
 		usecase.NewListWaitingTickets(tickets, customers, current),
-		usecase.NewClaimNextTicket(repository.NewClaimRepository(conn), order, current, notices),
+		usecase.NewClaimNextTicket(repository.NewClaimRepository(conn), order, current, shared),
 	), limits, requireLogin)
 	go job.NewRecalcPriority(
-		usecase.NewRecalcOpenScores(tickets, customers, order, notices),
+		usecase.NewRecalcOpenScores(tickets, customers, order, shared),
 		dashboard,
 		order,
 		cfg.PriorityRecalc,
 	).Run(jobCtx)
 	go job.NewReleaseDisconnectedAgent(
-		usecase.NewReleaseDisconnectedAgents(users, customers, statuses, order, notices, notices, cfg.AgentDisconnectGrace),
+		usecase.NewReleaseDisconnectedAgents(users, customers, statuses, order, notices, shared, cfg.AgentDisconnectGrace),
 		cfg.PriorityRecalc,
 	).Run(jobCtx)
 
