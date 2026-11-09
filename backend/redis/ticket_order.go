@@ -2,6 +2,7 @@ package redis
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"time"
 
@@ -17,6 +18,16 @@ if redis.call("get", KEYS[1]) == ARGV[1] then
 else
 	return 0
 end`
+
+const replaceQueueScript = `
+redis.call("DEL", KEYS[1])
+local i = 1
+while i < #ARGV do
+	redis.call("ZADD", KEYS[1], ARGV[i], ARGV[i + 1])
+	i = i + 2
+end
+return 0
+`
 
 type TicketOrder struct {
 	client *goredis.Client
@@ -77,6 +88,18 @@ func (o *TicketOrder) PopMax(ctx context.Context) (string, int, bool, error) {
 //待ち順からチケットを外す
 func (o *TicketOrder) Remove(ctx context.Context, ticketID string) error {
 	return o.client.ZRem(ctx, ticketQueueKey, ticketID).Err()
+}
+
+//待ち順を空にして、渡されたチケットだけを載せる
+func (o *TicketOrder) Replace(ctx context.Context, ticketIDs []string, scores []int) error {
+	if len(ticketIDs) != len(scores) {
+		return fmt.Errorf("待ち順に載せる件数と点数が合いません")
+	}
+	args := make([]any, 0, len(ticketIDs)*2)
+	for i, ticketID := range ticketIDs {
+		args = append(args, scores[i], ticketID)
+	}
+	return o.client.Eval(ctx, replaceQueueScript, []string{ticketQueueKey}, args...).Err()
 }
 
 //一定時間だけロックを取る取れなければ何もしない

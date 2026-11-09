@@ -66,6 +66,7 @@ type TicketQueue interface {
 	Enqueue(ctx context.Context, ticketID string, score int) error
 	PopMax(ctx context.Context) (ticketID string, score int, ok bool, err error)
 	Remove(ctx context.Context, ticketID string) error
+	Replace(ctx context.Context, ticketIDs []string, scores []int) error
 }
 
 type AgentStatusView struct {
