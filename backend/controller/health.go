@@ -5,18 +5,17 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	"escalator/usecase"
 )
 
 type HealthAPI struct {
-	check *usecase.CheckHealth
+	check checkHealthUsecase
 }
 
-func NewHealthAPI(check *usecase.CheckHealth) *HealthAPI {
+func NewHealthAPI(check checkHealthUsecase) *HealthAPI {
 	return &HealthAPI{check: check}
 }
 
-//データベースと待ち順の保存先が応答するかを返す
+// データベースと待ち順の保存先が応答するかを返す
 func (a *HealthAPI) Show(c echo.Context) error {
 	if err := a.check.Execute(c.Request().Context()); err != nil {
 		return c.JSON(http.StatusServiceUnavailable, messageJSON{Message: err.Error()})

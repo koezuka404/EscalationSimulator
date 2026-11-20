@@ -6,21 +6,22 @@ import (
 	"time"
 
 	"escalator/entity"
-	"escalator/repository"
+	"escalator/port"
+	"escalator/rule"
 )
 
 type RecalcOpenScores struct {
-	tickets   repository.TicketRepository
-	customers repository.CustomerRepository
-	queue     repository.TicketQueue
+	tickets   port.TicketRepository
+	customers port.CustomerRepository
+	queue     port.TicketQueue
 	notices   Notifier
 }
 
-func NewRecalcOpenScores(tickets repository.TicketRepository, customers repository.CustomerRepository, queue repository.TicketQueue, notices Notifier) *RecalcOpenScores {
+func NewRecalcOpenScores(tickets port.TicketRepository, customers port.CustomerRepository, queue port.TicketQueue, notices Notifier) *RecalcOpenScores {
 	return &RecalcOpenScores{tickets: tickets, customers: customers, queue: queue, notices: notices}
 }
 
-//対応待ちの点数を今の時刻でやり直し、待ち順も同じ点数にする
+// 対応待ちの点数を今の時刻でやり直し、待ち順も同じ点数にする
 func (r *RecalcOpenScores) Execute(ctx context.Context) error {
 	open, byID, err := r.openTickets(ctx)
 	if err != nil {
@@ -42,7 +43,7 @@ func (r *RecalcOpenScores) Execute(ctx context.Context) error {
 	return nil
 }
 
-//待ち順を空にして、今の対応待ちだけを載せ直す
+// 待ち順を空にして、今の対応待ちだけを載せ直す
 func (r *RecalcOpenScores) Rebuild(ctx context.Context) error {
 	open, byID, err := r.openTickets(ctx)
 	if err != nil {
@@ -90,12 +91,12 @@ func (r *RecalcOpenScores) refreshOpen(ctx context.Context, ticket entity.Ticket
 		log.Printf("顧客が見つからないため、点数をやり直せませんでした。id=%s", ticket.ID)
 		return 0, false
 	}
-	planScore, err := customer.PlanScore()
+	planScore, err := rule.PlanScore(customer)
 	if err != nil {
 		log.Printf("点数を計算できませんでした。id=%s: %v", ticket.ID, err)
 		return 0, false
 	}
-	score, err := entity.PriorityScore(ticket.Severity, planScore, ticket.CreatedAt, now, customer.SLAMinutes, false)
+	score, err := rule.PriorityScore(ticket.Severity, planScore, ticket.CreatedAt, now, customer.SLAMinutes, false)
 	if err != nil {
 		log.Printf("点数を計算できませんでした。id=%s: %v", ticket.ID, err)
 		return 0, false
@@ -108,7 +109,7 @@ func (r *RecalcOpenScores) refreshOpen(ctx context.Context, ticket entity.Ticket
 	if !saved {
 		return 0, false
 	}
-	_, _, overdueMinutes, overdue := entity.SLAProgress(ticket.CreatedAt, now, customer.SLAMinutes, false)
+	_, _, overdueMinutes, overdue := rule.SLAProgress(ticket.CreatedAt, now, customer.SLAMinutes, false)
 	if overdue && ticket.SlaNotifiedAt.IsZero() {
 		marked, err := r.tickets.MarkSLANotified(ctx, ticket.ID, now)
 		if err != nil {

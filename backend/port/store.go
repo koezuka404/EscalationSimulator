@@ -1,4 +1,4 @@
-package repository
+package port
 
 import (
 	"context"
@@ -49,10 +49,10 @@ type TicketRepository interface {
 	AddWorkNote(ctx context.Context, ticketID, userID, body string, createdAt time.Time) (entity.WorkNote, error)
 	ListWorkNotes(ctx context.Context, ticketID string) ([]entity.WorkNote, error)
 	Close(ctx context.Context, id, comment string, closedAt time.Time) (entity.Ticket, error)
-	UpdateSeverity(ctx context.Context, id string, severity, planScore, slaMinutes int, reason, changedBy string, now time.Time) (entity.Ticket, error)
+	UpdateSeverity(ctx context.Context, id string, severity, score int, reason, changedBy string, now time.Time) (entity.Ticket, error)
 	UpdateOpenScore(ctx context.Context, id string, score int, now time.Time) (bool, error)
 	MarkSLANotified(ctx context.Context, id string, at time.Time) (bool, error)
-	Release(ctx context.Context, id string, planScore, slaMinutes int, now time.Time) (entity.Ticket, error)
+	Release(ctx context.Context, id string, score int, now time.Time) (entity.Ticket, error)
 }
 
 type TicketFilter struct {
@@ -89,5 +89,13 @@ type DemoRepository interface {
 }
 
 type ClaimStore interface {
-	ClaimNext(ctx context.Context, agentID string, queue TicketQueue) (entity.Ticket, error)
+	ClaimNext(ctx context.Context, agentID string, queue TicketQueue, overdue func(createdAt time.Time, slaMinutes int, now time.Time) bool) (entity.Ticket, error)
+}
+
+type AuditRepository interface {
+	Save(ctx context.Context, entry entity.AuditEntry) error
+}
+
+type RequestLogRepository interface {
+	Save(ctx context.Context, entry entity.RequestLogEntry) error
 }

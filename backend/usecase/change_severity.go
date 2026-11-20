@@ -6,57 +6,65 @@ import (
 	"time"
 
 	"escalator/entity"
-	"escalator/repository"
+	"escalator/port"
+	"escalator/rule"
 )
 
 type ChangeSeverity struct {
-	tickets   repository.TicketRepository
-	customers repository.CustomerRepository
+	tickets   port.TicketRepository
+	customers port.CustomerRepository
 	current   *CurrentUser
-	queue     repository.TicketQueue
+	queue     port.TicketQueue
 	notices   Notifier
+	audit     *AuditLog
 }
 
-func NewChangeSeverity(tickets repository.TicketRepository, customers repository.CustomerRepository, current *CurrentUser, queue repository.TicketQueue, notices Notifier) *ChangeSeverity {
-	return &ChangeSeverity{tickets: tickets, customers: customers, current: current, queue: queue, notices: notices}
+func NewChangeSeverity(tickets port.TicketRepository, customers port.CustomerRepository, current *CurrentUser, queue port.TicketQueue, notices Notifier, audit *AuditLog) *ChangeSeverity {
+	return &ChangeSeverity{tickets: tickets, customers: customers, current: current, queue: queue, notices: notices, audit: audit}
 }
 
-//緊急度を変え、対応待ちなら待ち順の点数も直す
+// 緊急度を変え、対応待ちなら待ち順の点数も直す
 func (c *ChangeSeverity) Execute(ctx context.Context, authorization, ticketID, reason string, severity int) (entity.Ticket, error) {
-	reason, err := entity.SeverityReason(reason)
+	reason, err := rule.SeverityReason(reason)
 	if err != nil {
 		return entity.Ticket{}, err
 	}
 	if severity < 1 || severity > 4 {
-		return entity.Ticket{}, entity.ErrInvalidSeverity
+		return entity.Ticket{}, rule.ErrInvalidSeverity
 	}
 	actor, err := c.current.Execute(ctx, authorization)
 	if err != nil {
 		return entity.Ticket{}, err
 	}
 	if actor.Role != entity.RoleAgent && actor.Role != entity.RoleAdmin {
-		return entity.Ticket{}, entity.ErrSeverityRole
+		return entity.Ticket{}, rule.ErrSeverityRole
 	}
 	ticket, err := c.tickets.FindByID(ctx, ticketID)
 	if err != nil {
 		return entity.Ticket{}, err
 	}
-	if err := entity.CanChangeSeverity(actor.Role, actor.ID, ticket, severity); err != nil {
+	if err := rule.CanChangeSeverity(actor.Role, actor.ID, ticket, severity); err != nil {
 		return entity.Ticket{}, err
 	}
 	customer, err := c.customers.FindByID(ctx, ticket.CustomerID)
 	if err != nil {
 		return entity.Ticket{}, err
 	}
-	planScore, err := customer.PlanScore()
+	planScore, err := rule.PlanScore(customer)
 	if err != nil {
 		return entity.Ticket{}, err
 	}
 	now := time.Now()
-	updated, err := c.tickets.UpdateSeverity(ctx, ticket.ID, severity, planScore, customer.SLAMinutes, reason, actor.ID, now)
+	assigned := ticket.Status == entity.TicketInProgress
+	score, err := rule.PriorityScore(severity, planScore, ticket.CreatedAt, now, customer.SLAMinutes, assigned)
 	if err != nil {
 		return entity.Ticket{}, err
 	}
+	updated, err := c.tickets.UpdateSeverity(ctx, ticket.ID, severity, score, reason, actor.ID, now)
+	if err != nil {
+		return entity.Ticket{}, err
+	}
+	c.audit.Record(ctx, actor.ID, entity.AuditSeverityChanged, "ticket", updated.ID, "緊急度を変更しました")
 	publish(c.notices, true, updated.CreatedBy, map[string]any{
 		"type":           "severity_changed",
 		"ticket_id":      updated.ID,

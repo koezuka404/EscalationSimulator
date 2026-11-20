@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"escalator/entity"
-	"escalator/redis"
 	"escalator/usecase"
 )
 
@@ -20,13 +19,19 @@ type envelope struct {
 	Body        json.RawMessage `json:"body"`
 }
 
+type NoticeBus interface {
+	Origin() string
+	Publish(ctx context.Context, channel string, payload []byte) error
+	Listen(ctx context.Context, channels []string, on func(channel string, payload []byte))
+}
+
 type RemoteNotices struct {
 	hub    *Hub
-	bus    *redis.Bus
+	bus    NoticeBus
 	prefix string
 }
 
-func NewRemoteNotices(hub *Hub, bus *redis.Bus, prefix string) *RemoteNotices {
+func NewRemoteNotices(hub *Hub, bus NoticeBus, prefix string) *RemoteNotices {
 	prefix = strings.TrimSpace(prefix)
 	if prefix != "" && !strings.HasSuffix(prefix, ":") {
 		prefix += ":"

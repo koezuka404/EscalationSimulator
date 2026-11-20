@@ -9,17 +9,19 @@ import (
 	"gorm.io/gorm/clause"
 
 	"escalator/entity"
+	"escalator/port"
+	"escalator/rule"
 )
 
 type agentStatusRepository struct {
 	db *gorm.DB
 }
 
-func NewAgentStatusRepository(db *gorm.DB) AgentStatusRepository {
+func NewAgentStatusRepository(db *gorm.DB) port.AgentStatusRepository {
 	return &agentStatusRepository{db: db}
 }
 
-//担当者を待機中にする対応中のチケットがあるときは変えない
+// 担当者を待機中にする対応中のチケットがあるときは変えない
 func (r *agentStatusRepository) GoAvailable(ctx context.Context, agentID string, now time.Time) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := ensureAgentAvailable(tx, agentID); err != nil {
@@ -34,13 +36,13 @@ func (r *agentStatusRepository) GoAvailable(ctx context.Context, agentID string,
 			return err
 		}
 		if working > 0 {
-			return entity.ErrCannotBecomeAvailable
+			return rule.ErrCannotBecomeAvailable
 		}
 		return setAgentStatus(tx, agentID, entity.AgentAvailable, now)
 	})
 }
 
-//担当者を離席にし、対応中のチケットを待ちに戻す
+// 担当者を離席にし、対応中のチケットを待ちに戻す
 func (r *agentStatusRepository) GoOffline(ctx context.Context, agentID string, now time.Time, scoreOf func(entity.Ticket) (int, error)) ([]entity.Ticket, error) {
 	var released []entity.Ticket
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -94,15 +96,15 @@ func (r *agentStatusRepository) GoOffline(ctx context.Context, agentID string, n
 	return released, nil
 }
 
-//担当者の稼働を返す
-func (r *agentStatusRepository) List(ctx context.Context) ([]AgentStatusView, error) {
+// 担当者の稼働を返す
+func (r *agentStatusRepository) List(ctx context.Context) ([]port.AgentStatusView, error) {
 	var rows []agentStatusRow
 	if err := r.db.WithContext(ctx).Find(&rows).Error; err != nil {
 		return nil, err
 	}
-	statuses := make([]AgentStatusView, 0, len(rows))
+	statuses := make([]port.AgentStatusView, 0, len(rows))
 	for _, row := range rows {
-		statuses = append(statuses, AgentStatusView{UserID: row.UserID, Status: row.Status})
+		statuses = append(statuses, port.AgentStatusView{UserID: row.UserID, Status: row.Status})
 	}
 	return statuses, nil
 }

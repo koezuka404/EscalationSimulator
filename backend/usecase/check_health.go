@@ -25,7 +25,7 @@ func NewCheckHealth(database, queue Pinger) *CheckHealth {
 	return &CheckHealth{database: database, queue: queue}
 }
 
-//データベースと待ち順の保存先が応答するか確かめる
+// データベースと待ち順の保存先が応答するか確かめる
 func (c *CheckHealth) Execute(ctx context.Context) error {
 	dbErr := ping(ctx, c.database)
 	queueErr := ping(ctx, c.queue)

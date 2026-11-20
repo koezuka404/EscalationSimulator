@@ -8,11 +8,12 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"escalator/entity"
-	"escalator/repository"
+	"escalator/port"
+	"escalator/rule"
 )
 
-//利用者が1人も無いときだけ、サンプルの管理者、担当者、申請者を登録する
-func SeedUsersIfEmpty(ctx context.Context, users repository.UserRepository, customers repository.CustomerRepository, password string, cost int) error {
+// 利用者が1人も無いときだけ、サンプルの管理者、担当者、申請者を登録する
+func SeedUsersIfEmpty(ctx context.Context, users port.UserRepository, customers port.CustomerRepository, password string, cost int) error {
 	count, err := users.Count(ctx)
 	if err != nil {
 		return err
@@ -38,8 +39,8 @@ func SeedUsersIfEmpty(ctx context.Context, users repository.UserRepository, cust
 	return saveApplicants(ctx, users, listed, string(hash), password)
 }
 
-func saveStaff(ctx context.Context, users repository.UserRepository, hash, password string) error {
-	admin, err := entity.NewAdmin("サンプル管理者", "admin@example.com", password)
+func saveStaff(ctx context.Context, users port.UserRepository, hash, password string) error {
+	admin, err := rule.NewAdmin("サンプル管理者", "admin@example.com", password)
 	if err != nil {
 		return err
 	}
@@ -51,7 +52,7 @@ func saveStaff(ctx context.Context, users repository.UserRepository, hash, passw
 		{name: "サンプル担当者1", email: "agent1@example.com"},
 		{name: "サンプル担当者2", email: "agent2@example.com"},
 	} {
-		agent, err := entity.NewAgent(sample.name, sample.email, password)
+		agent, err := rule.NewAgent(sample.name, sample.email, password)
 		if err != nil {
 			return err
 		}
@@ -63,7 +64,7 @@ func saveStaff(ctx context.Context, users repository.UserRepository, hash, passw
 	return nil
 }
 
-func saveApplicants(ctx context.Context, users repository.UserRepository, customers []entity.Customer, hash, password string) error {
+func saveApplicants(ctx context.Context, users port.UserRepository, customers []entity.Customer, hash, password string) error {
 	samples := []struct {
 		name  string
 		email string
@@ -79,7 +80,7 @@ func saveApplicants(ctx context.Context, users repository.UserRepository, custom
 		if err != nil {
 			return err
 		}
-		applicant, err := entity.NewApplicant(sample.name, sample.email, password)
+		applicant, err := rule.NewApplicant(sample.name, sample.email, password)
 		if err != nil {
 			return err
 		}

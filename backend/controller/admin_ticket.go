@@ -9,19 +9,19 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	"escalator/entity"
+	"escalator/rule"
 	"escalator/usecase"
 )
 
 type AdminTicketAPI struct {
-	search *usecase.SearchTickets
+	search searchTicketsUsecase
 }
 
-func NewAdminTicketAPI(search *usecase.SearchTickets) *AdminTicketAPI {
+func NewAdminTicketAPI(search searchTicketsUsecase) *AdminTicketAPI {
 	return &AdminTicketAPI{search: search}
 }
 
-//管理者の全件の絞り込みを受ける
+// 管理者の全件の絞り込みを受ける
 func (a *AdminTicketAPI) Search(c echo.Context) error {
 	severity, err := querySeverity(c.QueryParam("severity"))
 	if err != nil {
@@ -52,7 +52,7 @@ func querySeverity(raw string) (int, error) {
 	}
 	severity, err := strconv.Atoi(raw)
 	if err != nil || severity < 1 || severity > 4 {
-		return 0, entity.ErrInvalidSeverity
+		return 0, rule.ErrInvalidSeverity
 	}
 	return severity, nil
 }
@@ -95,11 +95,11 @@ func toAdminTicketJSON(ticket usecase.FoundTicket) adminTicketJSON {
 
 func writeAdminTicketError(c echo.Context, err error) error {
 	switch {
-	case errors.Is(err, entity.ErrUnauthenticated):
+	case errors.Is(err, rule.ErrUnauthenticated):
 		return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrForbidden):
+	case errors.Is(err, rule.ErrForbidden):
 		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrInvalidTicketStatus), errors.Is(err, entity.ErrInvalidSeverity):
+	case errors.Is(err, rule.ErrInvalidTicketStatus), errors.Is(err, rule.ErrInvalidSeverity):
 		return c.JSON(http.StatusBadRequest, messageJSON{Message: err.Error()})
 	default:
 		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "チケットの一覧をまとめられませんでした。しばらくしてから、もう一度試してください"})

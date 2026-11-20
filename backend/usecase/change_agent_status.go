@@ -6,7 +6,8 @@ import (
 	"time"
 
 	"escalator/entity"
-	"escalator/repository"
+	"escalator/port"
+	"escalator/rule"
 )
 
 type AgentStatus struct {
@@ -15,21 +16,22 @@ type AgentStatus struct {
 }
 
 type ChangeAgentStatus struct {
-	users     repository.UserRepository
-	customers repository.CustomerRepository
-	statuses  repository.AgentStatusRepository
-	queue     repository.TicketQueue
+	users     port.UserRepository
+	customers port.CustomerRepository
+	statuses  port.AgentStatusRepository
+	queue     port.TicketQueue
 	current   *CurrentUser
 	notices   Notifier
+	audit     *AuditLog
 }
 
-func NewChangeAgentStatus(users repository.UserRepository, customers repository.CustomerRepository, statuses repository.AgentStatusRepository, queue repository.TicketQueue, current *CurrentUser, notices Notifier) *ChangeAgentStatus {
-	return &ChangeAgentStatus{users: users, customers: customers, statuses: statuses, queue: queue, current: current, notices: notices}
+func NewChangeAgentStatus(users port.UserRepository, customers port.CustomerRepository, statuses port.AgentStatusRepository, queue port.TicketQueue, current *CurrentUser, notices Notifier, audit *AuditLog) *ChangeAgentStatus {
+	return &ChangeAgentStatus{users: users, customers: customers, statuses: statuses, queue: queue, current: current, notices: notices, audit: audit}
 }
 
-//稼働を待機中か離席に切り替える離席なら対応中を待ちに戻す
+// 稼働を待機中か離席に切り替える離席なら対応中を待ちに戻す
 func (c *ChangeAgentStatus) Execute(ctx context.Context, authorization, targetID, rawStatus string) (AgentStatus, error) {
-	next, err := entity.ParseAvailability(rawStatus)
+	next, err := rule.ParseAvailability(rawStatus)
 	if err != nil {
 		return AgentStatus{}, err
 	}
@@ -50,7 +52,7 @@ func (c *ChangeAgentStatus) Execute(ctx context.Context, authorization, targetID
 		targetRole = target.Role
 		targetName = target.Name
 	}
-	if err := entity.CanSetAvailability(actor.Role, actor.ID, targetID, targetRole, next); err != nil {
+	if err := rule.CanSetAvailability(actor.Role, actor.ID, targetID, targetRole, next); err != nil {
 		return AgentStatus{}, err
 	}
 	now := time.Now()
@@ -71,11 +73,11 @@ func (c *ChangeAgentStatus) Execute(ctx context.Context, authorization, targetID
 		if err != nil {
 			return 0, err
 		}
-		planScore, err := customer.PlanScore()
+		planScore, err := rule.PlanScore(customer)
 		if err != nil {
 			return 0, err
 		}
-		return entity.PriorityScore(ticket.Severity, planScore, ticket.CreatedAt, now, customer.SLAMinutes, false)
+		return rule.PriorityScore(ticket.Severity, planScore, ticket.CreatedAt, now, customer.SLAMinutes, false)
 	})
 	if err != nil {
 		return AgentStatus{}, err
@@ -88,6 +90,7 @@ func (c *ChangeAgentStatus) Execute(ctx context.Context, authorization, targetID
 			log.Printf("待ち順に載せられませんでした。チケットは待ちに戻してあります。id=%s: %v", ticket.ID, err)
 		}
 		c.notifyReturned(ctx, ticket)
+		c.audit.Record(ctx, actor.ID, entity.AuditTicketReleased, "ticket", ticket.ID, "離席にしたため、担当を外して待ちに戻しました")
 	}
 	publish(c.notices, true, "", map[string]any{
 		"type":    "agent_status_changed",

@@ -8,24 +8,25 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"escalator/entity"
+	"escalator/rule"
 	"escalator/usecase"
 )
 
 type TicketAPI struct {
-	create   *usecase.CreateTicket
-	close    *usecase.CloseTicket
-	severity *usecase.ChangeSeverity
-	release  *usecase.ReturnTicketToQueue
-	mine     *usecase.ListMyTickets
-	show     *usecase.ShowTicket
-	note     *usecase.AddWorkNote
+	create   createTicketUsecase
+	close    closeTicketUsecase
+	severity changeSeverityUsecase
+	release  returnTicketUsecase
+	mine     listMyTicketsUsecase
+	show     showTicketUsecase
+	note     addWorkNoteUsecase
 }
 
-func NewTicketAPI(create *usecase.CreateTicket, close *usecase.CloseTicket, severity *usecase.ChangeSeverity, release *usecase.ReturnTicketToQueue, mine *usecase.ListMyTickets, show *usecase.ShowTicket, note *usecase.AddWorkNote) *TicketAPI {
+func NewTicketAPI(create createTicketUsecase, close closeTicketUsecase, severity changeSeverityUsecase, release returnTicketUsecase, mine listMyTicketsUsecase, show showTicketUsecase, note addWorkNoteUsecase) *TicketAPI {
 	return &TicketAPI{create: create, close: close, severity: severity, release: release, mine: mine, show: show, note: note}
 }
 
-//申請者の自分のチケット一覧を返す
+// 申請者の自分のチケット一覧を返す
 func (a *TicketAPI) ListMine(c echo.Context) error {
 	tickets, err := a.mine.Execute(c.Request().Context(), c.Request().Header.Get("Authorization"))
 	if err != nil {
@@ -38,7 +39,7 @@ func (a *TicketAPI) ListMine(c echo.Context) error {
 	return c.JSON(http.StatusOK, body)
 }
 
-//チケットの詳細を返す
+// チケットの詳細を返す
 func (a *TicketAPI) Show(c echo.Context) error {
 	detail, err := a.show.Execute(c.Request().Context(), c.Request().Header.Get("Authorization"), c.Param("id"))
 	if err != nil {
@@ -47,7 +48,7 @@ func (a *TicketAPI) Show(c echo.Context) error {
 	return c.JSON(http.StatusOK, toTicketDetailJSON(detail))
 }
 
-//対応メモの追加を受ける
+// 対応メモの追加を受ける
 func (a *TicketAPI) AddNote(c echo.Context) error {
 	var body workNoteRequestJSON
 	if err := c.Bind(&body); err != nil {
@@ -66,7 +67,7 @@ func (a *TicketAPI) AddNote(c echo.Context) error {
 	})
 }
 
-//チケットの起票を受ける
+// チケットの起票を受ける
 func (a *TicketAPI) Create(c echo.Context) error {
 	var body createTicketJSON
 	if err := c.Bind(&body); err != nil {
@@ -86,7 +87,7 @@ func (a *TicketAPI) Create(c echo.Context) error {
 	return c.JSON(http.StatusCreated, toTicketJSON(ticket))
 }
 
-//チケットの完了を受ける
+// チケットの完了を受ける
 func (a *TicketAPI) Close(c echo.Context) error {
 	var body closeTicketJSON
 	if err := c.Bind(&body); err != nil {
@@ -99,7 +100,7 @@ func (a *TicketAPI) Close(c echo.Context) error {
 	return c.JSON(http.StatusOK, toTicketJSON(ticket))
 }
 
-//緊急度の変更を受ける
+// 緊急度の変更を受ける
 func (a *TicketAPI) Escalate(c echo.Context) error {
 	var body changeSeverityJSON
 	if err := c.Bind(&body); err != nil {
@@ -112,7 +113,7 @@ func (a *TicketAPI) Escalate(c echo.Context) error {
 	return c.JSON(http.StatusOK, toTicketJSON(ticket))
 }
 
-//担当を外して待ちに戻す依頼を受ける
+// 担当を外して待ちに戻す依頼を受ける
 func (a *TicketAPI) Release(c echo.Context) error {
 	ticket, err := a.release.Execute(c.Request().Context(), c.Request().Header.Get("Authorization"), c.Param("id"))
 	if err != nil {
@@ -251,16 +252,16 @@ func toTicketDetailJSON(detail usecase.TicketDetail) ticketDetailJSON {
 
 func writeWorkNoteError(c echo.Context, err error) error {
 	switch {
-	case errors.Is(err, entity.ErrUnauthenticated):
+	case errors.Is(err, rule.ErrUnauthenticated):
 		return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrWorkNoteRole),
-		errors.Is(err, entity.ErrWorkNoteAgent):
+	case errors.Is(err, rule.ErrWorkNoteRole),
+		errors.Is(err, rule.ErrWorkNoteAgent):
 		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrTicketNotFound):
+	case errors.Is(err, rule.ErrTicketNotFound):
 		return c.JSON(http.StatusNotFound, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrWorkNoteClosed):
+	case errors.Is(err, rule.ErrWorkNoteClosed):
 		return c.JSON(http.StatusConflict, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrInvalidWorkNote):
+	case errors.Is(err, rule.ErrInvalidWorkNote):
 		return c.JSON(http.StatusBadRequest, messageJSON{Message: err.Error()})
 	default:
 		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "対応メモを保存できませんでした。しばらくしてから、もう一度試してください"})
@@ -269,11 +270,11 @@ func writeWorkNoteError(c echo.Context, err error) error {
 
 func writeShowTicketError(c echo.Context, err error) error {
 	switch {
-	case errors.Is(err, entity.ErrUnauthenticated):
+	case errors.Is(err, rule.ErrUnauthenticated):
 		return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrTicketHidden):
+	case errors.Is(err, rule.ErrTicketHidden):
 		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrTicketNotFound):
+	case errors.Is(err, rule.ErrTicketNotFound):
 		return c.JSON(http.StatusNotFound, messageJSON{Message: err.Error()})
 	default:
 		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "チケットの詳細を返せませんでした。しばらくしてから、もう一度試してください"})
@@ -282,9 +283,9 @@ func writeShowTicketError(c echo.Context, err error) error {
 
 func writeMyTicketsError(c echo.Context, err error) error {
 	switch {
-	case errors.Is(err, entity.ErrUnauthenticated):
+	case errors.Is(err, rule.ErrUnauthenticated):
 		return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrMyTicketsForbidden):
+	case errors.Is(err, rule.ErrMyTicketsForbidden):
 		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
 	default:
 		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "チケットの一覧を返せませんでした。しばらくしてから、もう一度試してください"})
@@ -347,18 +348,18 @@ func toTicketJSON(ticket entity.Ticket) ticketJSON {
 
 func writeCreateTicketError(c echo.Context, err error) error {
 	switch {
-	case errors.Is(err, entity.ErrUnauthenticated):
+	case errors.Is(err, rule.ErrUnauthenticated):
 		return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrTicketApplicant):
+	case errors.Is(err, rule.ErrTicketApplicant):
 		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrCustomerRequired):
+	case errors.Is(err, rule.ErrCustomerRequired):
 		return c.JSON(http.StatusConflict, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrCustomerNotFound):
+	case errors.Is(err, rule.ErrCustomerNotFound):
 		return c.JSON(http.StatusNotFound, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrInvalidTitle),
-		errors.Is(err, entity.ErrInvalidDescription),
-		errors.Is(err, entity.ErrInvalidCategory),
-		errors.Is(err, entity.ErrInvalidSeverity):
+	case errors.Is(err, rule.ErrInvalidTitle),
+		errors.Is(err, rule.ErrInvalidDescription),
+		errors.Is(err, rule.ErrInvalidCategory),
+		errors.Is(err, rule.ErrInvalidSeverity):
 		return c.JSON(http.StatusBadRequest, messageJSON{Message: err.Error()})
 	default:
 		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "チケットを起票できませんでした。しばらくしてから、もう一度試してください"})
@@ -367,15 +368,15 @@ func writeCreateTicketError(c echo.Context, err error) error {
 
 func writeCloseTicketError(c echo.Context, err error) error {
 	switch {
-	case errors.Is(err, entity.ErrUnauthenticated):
+	case errors.Is(err, rule.ErrUnauthenticated):
 		return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrCloseForbidden):
+	case errors.Is(err, rule.ErrCloseForbidden):
 		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrTicketNotFound):
+	case errors.Is(err, rule.ErrTicketNotFound):
 		return c.JSON(http.StatusNotFound, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrNotInProgress):
+	case errors.Is(err, rule.ErrNotInProgress):
 		return c.JSON(http.StatusConflict, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrInvalidCloseComment):
+	case errors.Is(err, rule.ErrInvalidCloseComment):
 		return c.JSON(http.StatusBadRequest, messageJSON{Message: err.Error()})
 	default:
 		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "チケットを完了できませんでした。しばらくしてから、もう一度試してください"})
@@ -384,20 +385,20 @@ func writeCloseTicketError(c echo.Context, err error) error {
 
 func writeChangeSeverityError(c echo.Context, err error) error {
 	switch {
-	case errors.Is(err, entity.ErrUnauthenticated):
+	case errors.Is(err, rule.ErrUnauthenticated):
 		return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrSeverityRole),
-		errors.Is(err, entity.ErrSeverityLower),
-		errors.Is(err, entity.ErrSeverityRaise):
+	case errors.Is(err, rule.ErrSeverityRole),
+		errors.Is(err, rule.ErrSeverityLower),
+		errors.Is(err, rule.ErrSeverityRaise):
 		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrTicketNotFound),
-		errors.Is(err, entity.ErrCustomerNotFound):
+	case errors.Is(err, rule.ErrTicketNotFound),
+		errors.Is(err, rule.ErrCustomerNotFound):
 		return c.JSON(http.StatusNotFound, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrSeverityClosed):
+	case errors.Is(err, rule.ErrSeverityClosed):
 		return c.JSON(http.StatusConflict, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrInvalidSeverity),
-		errors.Is(err, entity.ErrInvalidSeverityReason),
-		errors.Is(err, entity.ErrSeveritySame):
+	case errors.Is(err, rule.ErrInvalidSeverity),
+		errors.Is(err, rule.ErrInvalidSeverityReason),
+		errors.Is(err, rule.ErrSeveritySame):
 		return c.JSON(http.StatusBadRequest, messageJSON{Message: err.Error()})
 	default:
 		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "緊急度を変更できませんでした。しばらくしてから、もう一度試してください"})
@@ -406,14 +407,14 @@ func writeChangeSeverityError(c echo.Context, err error) error {
 
 func writeReleaseError(c echo.Context, err error) error {
 	switch {
-	case errors.Is(err, entity.ErrUnauthenticated):
+	case errors.Is(err, rule.ErrUnauthenticated):
 		return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrReleaseForbidden):
+	case errors.Is(err, rule.ErrReleaseForbidden):
 		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrTicketNotFound),
-		errors.Is(err, entity.ErrCustomerNotFound):
+	case errors.Is(err, rule.ErrTicketNotFound),
+		errors.Is(err, rule.ErrCustomerNotFound):
 		return c.JSON(http.StatusNotFound, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrNotInProgress):
+	case errors.Is(err, rule.ErrNotInProgress):
 		return c.JSON(http.StatusConflict, messageJSON{Message: err.Error()})
 	default:
 		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "チケットを待ちに戻せませんでした。しばらくしてから、もう一度試してください"})

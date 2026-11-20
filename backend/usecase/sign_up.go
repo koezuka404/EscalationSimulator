@@ -6,21 +6,22 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"escalator/entity"
-	"escalator/repository"
+	"escalator/port"
+	"escalator/rule"
 )
 
 type SignUp struct {
-	users repository.UserRepository
+	users port.UserRepository
 	cost  int
 }
 
-func NewSignUp(users repository.UserRepository, cost int) *SignUp {
+func NewSignUp(users port.UserRepository, cost int) *SignUp {
 	return &SignUp{users: users, cost: cost}
 }
 
-//申請者を登録する
+// 申請者を登録する
 func (s *SignUp) Execute(ctx context.Context, name, email, password string) (entity.User, error) {
-	user, err := entity.NewApplicant(name, email, password)
+	user, err := rule.NewApplicant(name, email, password)
 	if err != nil {
 		return entity.User{}, err
 	}

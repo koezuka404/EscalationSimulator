@@ -7,7 +7,8 @@ import (
 	"time"
 
 	"escalator/entity"
-	"escalator/repository"
+	"escalator/port"
+	"escalator/rule"
 )
 
 type AgentPresence interface {
@@ -17,16 +18,17 @@ type AgentPresence interface {
 }
 
 type ReleaseDisconnectedAgents struct {
-	users     repository.UserRepository
-	customers repository.CustomerRepository
-	statuses  repository.AgentStatusRepository
-	queue     repository.TicketQueue
+	users     port.UserRepository
+	customers port.CustomerRepository
+	statuses  port.AgentStatusRepository
+	queue     port.TicketQueue
 	presence  AgentPresence
 	notices   Notifier
 	grace     time.Duration
+	audit     *AuditLog
 }
 
-func NewReleaseDisconnectedAgents(users repository.UserRepository, customers repository.CustomerRepository, statuses repository.AgentStatusRepository, queue repository.TicketQueue, presence AgentPresence, notices Notifier, grace time.Duration) *ReleaseDisconnectedAgents {
+func NewReleaseDisconnectedAgents(users port.UserRepository, customers port.CustomerRepository, statuses port.AgentStatusRepository, queue port.TicketQueue, presence AgentPresence, notices Notifier, grace time.Duration, audit *AuditLog) *ReleaseDisconnectedAgents {
 	return &ReleaseDisconnectedAgents{
 		users:     users,
 		customers: customers,
@@ -35,10 +37,11 @@ func NewReleaseDisconnectedAgents(users repository.UserRepository, customers rep
 		presence:  presence,
 		notices:   notices,
 		grace:     grace,
+		audit:     audit,
 	}
 }
 
-//接続がすべて切れてから一定時間戻らない担当者を離席にし、対応中を待ちに戻す
+// 接続がすべて切れてから一定時間戻らない担当者を離席にし、対応中を待ちに戻す
 func (r *ReleaseDisconnectedAgents) Execute(ctx context.Context) error {
 	due := r.presence.AgentsGoneSince(time.Now().Add(-r.grace))
 	for _, id := range due {
@@ -55,7 +58,7 @@ func (r *ReleaseDisconnectedAgents) releaseOne(ctx context.Context, id string) e
 	}
 	user, err := r.users.FindByID(ctx, id)
 	if err != nil {
-		if errors.Is(err, entity.ErrUserNotFound) {
+		if errors.Is(err, rule.ErrUserNotFound) {
 			r.presence.ForgetGone(id)
 			log.Printf("接続が切れた担当者が見つからなかったため、離席の確認をやめました。id=%s", id)
 			return nil
@@ -75,11 +78,11 @@ func (r *ReleaseDisconnectedAgents) releaseOne(ctx context.Context, id string) e
 		if err != nil {
 			return 0, err
 		}
-		planScore, err := customer.PlanScore()
+		planScore, err := rule.PlanScore(customer)
 		if err != nil {
 			return 0, err
 		}
-		return entity.PriorityScore(ticket.Severity, planScore, ticket.CreatedAt, now, customer.SLAMinutes, false)
+		return rule.PriorityScore(ticket.Severity, planScore, ticket.CreatedAt, now, customer.SLAMinutes, false)
 	})
 	if err != nil {
 		return err
@@ -93,6 +96,7 @@ func (r *ReleaseDisconnectedAgents) releaseOne(ctx context.Context, id string) e
 			log.Printf("待ち順に載せられませんでした。チケットは待ちに戻してあります。id=%s: %v", ticket.ID, err)
 		}
 		r.notifyReturned(ctx, ticket)
+		r.audit.Record(ctx, id, entity.AuditTicketReleased, "ticket", ticket.ID, "接続が切れたまま戻らなかったため、担当を外して待ちに戻しました")
 	}
 	publish(r.notices, true, "", map[string]any{
 		"type":    "agent_status_changed",

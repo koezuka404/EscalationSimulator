@@ -5,7 +5,8 @@ import (
 	"time"
 
 	"escalator/entity"
-	"escalator/repository"
+	"escalator/port"
+	"escalator/rule"
 )
 
 type MyTicket struct {
@@ -21,24 +22,24 @@ type MyTicket struct {
 }
 
 type ListMyTickets struct {
-	tickets   repository.TicketRepository
-	customers repository.CustomerRepository
-	users     repository.UserRepository
+	tickets   port.TicketRepository
+	customers port.CustomerRepository
+	users     port.UserRepository
 	current   *CurrentUser
 }
 
-func NewListMyTickets(tickets repository.TicketRepository, customers repository.CustomerRepository, users repository.UserRepository, current *CurrentUser) *ListMyTickets {
+func NewListMyTickets(tickets port.TicketRepository, customers port.CustomerRepository, users port.UserRepository, current *CurrentUser) *ListMyTickets {
 	return &ListMyTickets{tickets: tickets, customers: customers, users: users, current: current}
 }
 
-//申請者に、自分の起票を更新が新しい順で返す
+// 申請者に、自分の起票を更新が新しい順で返す
 func (l *ListMyTickets) Execute(ctx context.Context, authorization string) ([]MyTicket, error) {
 	actor, err := l.current.Execute(ctx, authorization)
 	if err != nil {
 		return nil, err
 	}
 	if actor.Role != entity.RoleApplicant {
-		return nil, entity.ErrMyTicketsForbidden
+		return nil, rule.ErrMyTicketsForbidden
 	}
 	tickets, err := l.tickets.ListByCreator(ctx, actor.ID)
 	if err != nil {
@@ -60,7 +61,7 @@ func (l *ListMyTickets) Execute(ctx context.Context, authorization string) ([]My
 	mine := make([]MyTicket, 0, len(tickets))
 	for _, ticket := range tickets {
 		customer := byCustomer[ticket.CustomerID]
-		_, remaining, overdueMinutes, overdue := entity.SLAProgress(ticket.CreatedAt, now, customer.SLAMinutes, ticket.AssigneeID != "")
+		_, remaining, overdueMinutes, overdue := rule.SLAProgress(ticket.CreatedAt, now, customer.SLAMinutes, ticket.AssigneeID != "")
 		if remaining < 0 {
 			remaining = 0
 		}

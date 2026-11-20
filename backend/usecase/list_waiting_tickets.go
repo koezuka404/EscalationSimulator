@@ -6,7 +6,8 @@ import (
 	"time"
 
 	"escalator/entity"
-	"escalator/repository"
+	"escalator/port"
+	"escalator/rule"
 )
 
 type WaitingTicket struct {
@@ -24,23 +25,23 @@ type WaitingTicket struct {
 }
 
 type ListWaitingTickets struct {
-	tickets   repository.TicketRepository
-	customers repository.CustomerRepository
+	tickets   port.TicketRepository
+	customers port.CustomerRepository
 	current   *CurrentUser
 }
 
-func NewListWaitingTickets(tickets repository.TicketRepository, customers repository.CustomerRepository, current *CurrentUser) *ListWaitingTickets {
+func NewListWaitingTickets(tickets port.TicketRepository, customers port.CustomerRepository, current *CurrentUser) *ListWaitingTickets {
 	return &ListWaitingTickets{tickets: tickets, customers: customers, current: current}
 }
 
-//担当者と管理者に、対応待ちを点数の高い順で返す
+// 担当者と管理者に、対応待ちを点数の高い順で返す
 func (l *ListWaitingTickets) Execute(ctx context.Context, authorization string) ([]WaitingTicket, error) {
 	actor, err := l.current.Execute(ctx, authorization)
 	if err != nil {
 		return nil, err
 	}
 	if actor.Role != entity.RoleAgent && actor.Role != entity.RoleAdmin {
-		return nil, entity.ErrQueueForbidden
+		return nil, rule.ErrQueueForbidden
 	}
 	open, err := l.tickets.ListOpen(ctx)
 	if err != nil {
@@ -59,12 +60,12 @@ func arrangeWaiting(open []entity.Ticket, customers []entity.Customer, now time.
 		byID[customer.ID] = customer
 	}
 	sort.Slice(open, func(i, j int) bool {
-		return entity.WaitingFirst(open[i].PriorityScore, open[i].CreatedAt, open[i].ID, open[j].PriorityScore, open[j].CreatedAt, open[j].ID)
+		return rule.WaitingFirst(open[i].PriorityScore, open[i].CreatedAt, open[i].ID, open[j].PriorityScore, open[j].CreatedAt, open[j].ID)
 	})
 	waiting := make([]WaitingTicket, 0, len(open))
 	for i, ticket := range open {
 		customer := byID[ticket.CustomerID]
-		waited, remaining, overdueMinutes, overdue := entity.SLAProgress(ticket.CreatedAt, now, customer.SLAMinutes, ticket.AssigneeID != "")
+		waited, remaining, overdueMinutes, overdue := rule.SLAProgress(ticket.CreatedAt, now, customer.SLAMinutes, ticket.AssigneeID != "")
 		waiting = append(waiting, WaitingTicket{
 			Rank:             i + 1,
 			ID:               ticket.ID,

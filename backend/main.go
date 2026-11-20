@@ -14,18 +14,18 @@ import (
 	"escalator/config"
 	"escalator/controller"
 	"escalator/db"
-	"escalator/entity"
 	"escalator/job"
 	"escalator/middleware"
 	"escalator/redis"
 	"escalator/repository"
 	"escalator/router"
+	"escalator/rule"
 	"escalator/seed"
 	"escalator/usecase"
 	"escalator/websocket"
 )
 
-//設定を読み、データベースと待ち順につないでサーバーを起動する
+// 設定を読み、データベースと待ち順につないでサーバーを起動する
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
@@ -69,23 +69,25 @@ func main() {
 	e.HideBanner = true
 	e.HidePort = true
 	e.Use(middleware.RequestID())
-	e.Use(middleware.AccessLog())
+	e.Use(middleware.RememberClientIP())
+	e.Use(middleware.AccessLog([]byte(cfg.JWTSecret), cfg.JWTIssuer, cfg.JWTAudience, usecase.NewRequestLog(repository.NewRequestLogRepository(conn))))
 	e.Use(middleware.Recover())
 	e.Use(middleware.AllowOrigin(cfg.CORSAllowedOrigin))
 	router.Health(e, controller.NewHealthAPI(usecase.NewCheckHealth(db.NewProbe(conn), order)))
 	users := repository.NewUserRepository(conn)
 	sessions := repository.NewSessionRepository(conn)
 	customers := repository.NewCustomerRepository(conn)
+	audit := usecase.NewAuditLog(repository.NewAuditRepository(conn))
 	limits := middleware.NewLimiter(redis.NewGate(order), []byte(cfg.JWTSecret), cfg.JWTIssuer, cfg.JWTAudience, cfg.RefreshTokenCookieName, func(ctx context.Context, tokenHash string) (string, error) {
 		userID, err := sessions.FindUserIDByHash(ctx, tokenHash)
-		if errors.Is(err, entity.ErrInvalidRefresh) {
+		if errors.Is(err, rule.ErrInvalidRefresh) {
 			return "", nil
 		}
 		return userID, err
-	})
+	}, audit)
 	current := usecase.NewCurrentUser(users, []byte(cfg.JWTSecret), cfg.JWTIssuer, cfg.JWTAudience)
 	requireLogin := middleware.RequireLogin(current.Execute)
-	router.Customers(e, controller.NewCustomerAPI(usecase.NewCustomers(customers, current)), requireLogin)
+	router.Customers(e, controller.NewCustomerAPI(usecase.NewCustomers(customers, current, audit)), requireLogin)
 	router.Me(e, controller.NewMeAPI(current), requireLogin)
 	tickets := repository.NewTicketRepository(conn)
 	statuses := repository.NewAgentStatusRepository(conn)
@@ -96,19 +98,19 @@ func main() {
 	go notices.Run()
 	router.Live(e, notices)
 	router.Users(e, controller.NewUserAPI(
-		usecase.NewLinkApplicant(users, customers, current),
+		usecase.NewLinkApplicant(users, customers, current, audit),
 		usecase.NewCreateAgent(users, current, cfg.BcryptCost),
 		usecase.NewListUsers(users, current),
-		usecase.NewSuspendUser(users, current, notices),
+		usecase.NewSuspendUser(users, current, notices, audit),
 		usecase.NewResumeUser(users, current),
-		usecase.NewDeleteUser(users, customers, statuses, order, current, shared),
-		usecase.NewChangeRole(users, customers, statuses, order, current, shared),
+		usecase.NewDeleteUser(users, customers, statuses, order, current, shared, audit),
+		usecase.NewChangeRole(users, customers, statuses, order, current, shared, audit),
 	), requireLogin)
 	jobCtx, stopJob := context.WithCancel(context.Background())
 	defer stopJob()
 	go shared.Run(jobCtx)
-	createTicket := usecase.NewCreateTicket(tickets, customers, current, order, shared)
-	demo := usecase.NewRunDemo(users, customers, repository.NewDemoRepository(conn), createTicket, shared, jobCtx)
+	createTicket := usecase.NewCreateTicket(tickets, customers, current, order, shared, audit)
+	demo := usecase.NewRunDemo(users, customers, repository.NewDemoRepository(conn), createTicket, shared, jobCtx, audit)
 	if err := demo.Recover(context.Background()); err != nil {
 		fmt.Fprintf(os.Stderr, "前回のデモを止めた状態にできませんでした: %v\n", err)
 		os.Exit(1)
@@ -118,34 +120,30 @@ func main() {
 	router.AdminTickets(e, controller.NewAdminTicketAPI(usecase.NewSearchTickets(tickets, customers, users, current)), requireLogin)
 	router.Tickets(e, controller.NewTicketAPI(
 		createTicket,
-		usecase.NewCloseTicket(tickets, order, current, shared),
-		usecase.NewChangeSeverity(tickets, customers, current, order, shared),
-		usecase.NewReturnTicketToQueue(tickets, customers, order, current, shared),
+		usecase.NewCloseTicket(tickets, order, current, shared, audit),
+		usecase.NewChangeSeverity(tickets, customers, current, order, shared, audit),
+		usecase.NewReturnTicketToQueue(tickets, customers, order, current, shared, audit),
 		usecase.NewListMyTickets(tickets, customers, users, current),
 		usecase.NewShowTicket(tickets, customers, users, current),
 		usecase.NewAddWorkNote(tickets, current),
 	), limits, requireLogin)
-	router.Agent(e, controller.NewAgentAPI(usecase.NewChangeAgentStatus(users, customers, statuses, order, current, shared)), requireLogin)
+	router.Agent(e, controller.NewAgentAPI(usecase.NewChangeAgentStatus(users, customers, statuses, order, current, shared, audit)), requireLogin)
+	scores := usecase.NewRecalcOpenScores(tickets, customers, order, shared)
 	router.Queue(e, controller.NewQueueAPI(
 		usecase.NewListWaitingTickets(tickets, customers, current),
-		usecase.NewClaimNextTicket(repository.NewClaimRepository(conn), order, current, shared),
+		usecase.NewClaimNextTicket(repository.NewClaimRepository(conn), order, current, shared, scores, order, cfg.PriorityRecalc, audit),
 	), limits, requireLogin)
-	go job.NewRecalcPriority(
-		usecase.NewRecalcOpenScores(tickets, customers, order, shared),
-		dashboard,
-		order,
-		cfg.PriorityRecalc,
-	).Run(jobCtx)
+	go job.NewRecalcPriority(scores, dashboard, order, cfg.PriorityRecalc).Run(jobCtx)
 	go job.NewReleaseDisconnectedAgent(
-		usecase.NewReleaseDisconnectedAgents(users, customers, statuses, order, notices, shared, cfg.AgentDisconnectGrace),
+		usecase.NewReleaseDisconnectedAgents(users, customers, statuses, order, notices, shared, cfg.AgentDisconnectGrace, audit),
 		cfg.PriorityRecalc,
 	).Run(jobCtx)
 
 	router.Auth(e, controller.NewAuthAPI(
 		usecase.NewSignUp(users, cfg.BcryptCost),
-		usecase.NewLogIn(users, sessions, []byte(cfg.JWTSecret), cfg.JWTIssuer, cfg.JWTAudience, cfg.AccessTokenTTL, cfg.RefreshTokenTTL, cfg.LoginMaxFailures, cfg.LoginLock),
-		usecase.NewLogOut(sessions),
-		usecase.NewRefresh(users, sessions, []byte(cfg.JWTSecret), cfg.JWTIssuer, cfg.JWTAudience, cfg.AccessTokenTTL, cfg.RefreshTokenTTL, notices),
+		usecase.NewLogIn(users, sessions, []byte(cfg.JWTSecret), cfg.JWTIssuer, cfg.JWTAudience, cfg.AccessTokenTTL, cfg.RefreshTokenTTL, cfg.LoginMaxFailures, cfg.LoginLock, audit),
+		usecase.NewLogOut(sessions, audit),
+		usecase.NewRefresh(users, sessions, []byte(cfg.JWTSecret), cfg.JWTIssuer, cfg.JWTAudience, cfg.AccessTokenTTL, cfg.RefreshTokenTTL, notices, audit),
 		cfg.RefreshTokenCookieName,
 		cfg.CSRFTokenCookieName,
 		cfg.CookieSecure,

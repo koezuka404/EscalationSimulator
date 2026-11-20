@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"escalator/repository"
+	"escalator/port"
 )
 
 type SnapshotAgent struct {
@@ -19,17 +19,17 @@ type QueuePicture struct {
 }
 
 type QueueSnapshot struct {
-	tickets   repository.TicketRepository
-	customers repository.CustomerRepository
-	users     repository.UserRepository
-	statuses  repository.AgentStatusRepository
+	tickets   port.TicketRepository
+	customers port.CustomerRepository
+	users     port.UserRepository
+	statuses  port.AgentStatusRepository
 }
 
-func NewQueueSnapshot(tickets repository.TicketRepository, customers repository.CustomerRepository, users repository.UserRepository, statuses repository.AgentStatusRepository) *QueueSnapshot {
+func NewQueueSnapshot(tickets port.TicketRepository, customers port.CustomerRepository, users port.UserRepository, statuses port.AgentStatusRepository) *QueueSnapshot {
 	return &QueueSnapshot{tickets: tickets, customers: customers, users: users, statuses: statuses}
 }
 
-//つながった担当者と管理者に、今の待ち順と稼働を返す
+// つながった担当者と管理者に、今の待ち順と稼働を返す
 func (s *QueueSnapshot) Execute(ctx context.Context) (QueuePicture, error) {
 	open, err := s.tickets.ListOpen(ctx)
 	if err != nil {

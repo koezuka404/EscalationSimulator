@@ -7,18 +7,18 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"escalator/entity"
-	"escalator/usecase"
+	"escalator/rule"
 )
 
 type DemoAPI struct {
-	demo *usecase.RunDemo
+	demo runDemoUsecase
 }
 
-func NewDemoAPI(demo *usecase.RunDemo) *DemoAPI {
+func NewDemoAPI(demo runDemoUsecase) *DemoAPI {
 	return &DemoAPI{demo: demo}
 }
 
-//デモの開始を受ける
+// デモの開始を受ける
 func (a *DemoAPI) Start(c echo.Context) error {
 	var body startDemoJSON
 	if err := c.Bind(&body); err != nil {
@@ -31,7 +31,7 @@ func (a *DemoAPI) Start(c echo.Context) error {
 	return c.JSON(http.StatusAccepted, toDemoJSON(run))
 }
 
-//デモの停止を受ける
+// デモの停止を受ける
 func (a *DemoAPI) Stop(c echo.Context) error {
 	run, err := a.demo.Stop(c.Request().Context(), c.Request().Header.Get("Authorization"))
 	if err != nil {
@@ -68,17 +68,17 @@ func toDemoJSON(run entity.DemoRun) demoJSON {
 
 func writeDemoError(c echo.Context, err error, fallback string) error {
 	switch {
-	case errors.Is(err, entity.ErrUnauthenticated):
+	case errors.Is(err, rule.ErrUnauthenticated):
 		return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrForbidden):
+	case errors.Is(err, rule.ErrForbidden):
 		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrInvalidDemoCount),
-		errors.Is(err, entity.ErrInvalidDemoInterval),
-		errors.Is(err, entity.ErrInvalidDemoDistribution):
+	case errors.Is(err, rule.ErrInvalidDemoCount),
+		errors.Is(err, rule.ErrInvalidDemoInterval),
+		errors.Is(err, rule.ErrInvalidDemoDistribution):
 		return c.JSON(http.StatusBadRequest, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrDemoNeedsApplicant),
-		errors.Is(err, entity.ErrDemoRunning),
-		errors.Is(err, entity.ErrDemoNotRunning):
+	case errors.Is(err, rule.ErrDemoNeedsApplicant),
+		errors.Is(err, rule.ErrDemoRunning),
+		errors.Is(err, rule.ErrDemoNotRunning):
 		return c.JSON(http.StatusConflict, messageJSON{Message: err.Error()})
 	default:
 		return c.JSON(http.StatusInternalServerError, messageJSON{Message: fallback})

@@ -6,7 +6,8 @@ import (
 	"time"
 
 	"escalator/entity"
-	"escalator/repository"
+	"escalator/port"
+	"escalator/rule"
 	"escalator/usecase/crypto"
 )
 
@@ -15,17 +16,18 @@ type ScreenConnection interface {
 }
 
 type Refresh struct {
-	users      repository.UserRepository
-	sessions   repository.SessionRepository
+	users      port.UserRepository
+	sessions   port.SessionRepository
 	secret     []byte
 	issuer     string
 	audience   string
 	accessTTL  time.Duration
 	refreshTTL time.Duration
 	screens    ScreenConnection
+	audit      *AuditLog
 }
 
-func NewRefresh(users repository.UserRepository, sessions repository.SessionRepository, secret []byte, issuer, audience string, accessTTL, refreshTTL time.Duration, screens ScreenConnection) *Refresh {
+func NewRefresh(users port.UserRepository, sessions port.SessionRepository, secret []byte, issuer, audience string, accessTTL, refreshTTL time.Duration, screens ScreenConnection, audit *AuditLog) *Refresh {
 	return &Refresh{
 		users:      users,
 		sessions:   sessions,
@@ -35,13 +37,14 @@ func NewRefresh(users repository.UserRepository, sessions repository.SessionRepo
 		accessTTL:  accessTTL,
 		refreshTTL: refreshTTL,
 		screens:    screens,
+		audit:      audit,
 	}
 }
 
-//再ログイン用の印を新しい印に替え、使い回しを見つけたら画面の接続を切る
+// 再ログイン用の印を新しい印に替え、使い回しを見つけたら画面の接続を切る
 func (r *Refresh) Execute(ctx context.Context, refreshToken string) (LoginResult, error) {
 	if refreshToken == "" {
-		return LoginResult{}, entity.ErrInvalidRefresh
+		return LoginResult{}, rule.ErrInvalidRefresh
 	}
 	now := time.Now()
 	raw, hash, err := crypto.NewSecretToken()
@@ -63,15 +66,17 @@ func (r *Refresh) Execute(ctx context.Context, refreshToken string) (LoginResult
 		if err := r.users.BumpAuthVersion(ctx, userID); err != nil {
 			return LoginResult{}, err
 		}
+		r.audit.Record(ctx, userID, entity.AuditRefreshReused, "user", userID, "無効な印の再利用を見つけました")
 		if r.screens != nil {
 			r.screens.CloseUser(userID)
+			log.Printf("使い回された印を見つけたため、その人の画面の接続を切りました。user_id=%s", userID)
+			r.audit.Record(ctx, userID, entity.AuditConnectionClosed, "user", userID, "画面の接続を切りました")
 		}
-		log.Printf("使い回された印を見つけたため、その人の画面の接続を切りました。user_id=%s", userID)
-		return LoginResult{}, entity.ErrInvalidRefresh
+		return LoginResult{}, rule.ErrInvalidRefresh
 	}
 	user, err := r.users.FindByID(ctx, userID)
 	if err != nil || user.Status != entity.StatusActive {
-		return LoginResult{}, entity.ErrInvalidRefresh
+		return LoginResult{}, rule.ErrInvalidRefresh
 	}
 	accessToken, expiresAt, err := crypto.IssueAccess(r.secret, r.issuer, r.audience, user.ID, user.AuthVersion, r.accessTTL, now)
 	if err != nil {

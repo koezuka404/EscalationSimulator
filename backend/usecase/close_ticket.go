@@ -6,23 +6,25 @@ import (
 	"time"
 
 	"escalator/entity"
-	"escalator/repository"
+	"escalator/port"
+	"escalator/rule"
 )
 
 type CloseTicket struct {
-	tickets repository.TicketRepository
-	queue   repository.TicketQueue
+	tickets port.TicketRepository
+	queue   port.TicketQueue
 	current *CurrentUser
 	notices Notifier
+	audit   *AuditLog
 }
 
-func NewCloseTicket(tickets repository.TicketRepository, queue repository.TicketQueue, current *CurrentUser, notices Notifier) *CloseTicket {
-	return &CloseTicket{tickets: tickets, queue: queue, current: current, notices: notices}
+func NewCloseTicket(tickets port.TicketRepository, queue port.TicketQueue, current *CurrentUser, notices Notifier, audit *AuditLog) *CloseTicket {
+	return &CloseTicket{tickets: tickets, queue: queue, current: current, notices: notices, audit: audit}
 }
 
-//対応中のチケットを完了にする
+// 対応中のチケットを完了にする
 func (c *CloseTicket) Execute(ctx context.Context, authorization, ticketID, comment string) (entity.Ticket, error) {
-	comment, err := entity.CloseCommentText(comment)
+	comment, err := rule.CloseCommentText(comment)
 	if err != nil {
 		return entity.Ticket{}, err
 	}
@@ -31,17 +33,17 @@ func (c *CloseTicket) Execute(ctx context.Context, authorization, ticketID, comm
 		return entity.Ticket{}, err
 	}
 	if actor.Role != entity.RoleAgent && actor.Role != entity.RoleAdmin {
-		return entity.Ticket{}, entity.ErrCloseForbidden
+		return entity.Ticket{}, rule.ErrCloseForbidden
 	}
 	ticket, err := c.tickets.FindByID(ctx, ticketID)
 	if err != nil {
 		return entity.Ticket{}, err
 	}
 	if actor.Role == entity.RoleAgent && actor.ID != ticket.AssigneeID {
-		return entity.Ticket{}, entity.ErrCloseForbidden
+		return entity.Ticket{}, rule.ErrCloseForbidden
 	}
 	if ticket.Status != entity.TicketInProgress {
-		return entity.Ticket{}, entity.ErrNotInProgress
+		return entity.Ticket{}, rule.ErrNotInProgress
 	}
 	closed, err := c.tickets.Close(ctx, ticket.ID, comment, time.Now())
 	if err != nil {
@@ -57,5 +59,6 @@ func (c *CloseTicket) Execute(ctx context.Context, authorization, ticketID, comm
 		"ticket_id": closed.ID,
 		"title":     closed.Title,
 	})
+	c.audit.Record(ctx, actor.ID, entity.AuditTicketClosed, "ticket", closed.ID, "チケットを完了しました")
 	return closed, nil
 }

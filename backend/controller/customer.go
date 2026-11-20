@@ -7,18 +7,18 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"escalator/entity"
-	"escalator/usecase"
+	"escalator/rule"
 )
 
 type CustomerAPI struct {
-	customers *usecase.Customers
+	customers customersUsecase
 }
 
-func NewCustomerAPI(customers *usecase.Customers) *CustomerAPI {
+func NewCustomerAPI(customers customersUsecase) *CustomerAPI {
 	return &CustomerAPI{customers: customers}
 }
 
-//顧客の一覧を返す
+// 顧客の一覧を返す
 func (a *CustomerAPI) List(c echo.Context) error {
 	customers, err := a.customers.List(c.Request().Context(), c.Request().Header.Get("Authorization"))
 	if err != nil {
@@ -31,7 +31,7 @@ func (a *CustomerAPI) List(c echo.Context) error {
 	return c.JSON(http.StatusOK, body)
 }
 
-//顧客の登録を受ける
+// 顧客の登録を受ける
 func (a *CustomerAPI) Create(c echo.Context) error {
 	var body updateCustomerJSON
 	if err := c.Bind(&body); err != nil {
@@ -44,7 +44,7 @@ func (a *CustomerAPI) Create(c echo.Context) error {
 	return c.JSON(http.StatusCreated, toCustomerJSON(customer))
 }
 
-//顧客の名前、プラン、目標時間を更新する
+// 顧客の名前、プラン、目標時間を更新する
 func (a *CustomerAPI) Update(c echo.Context) error {
 	var body updateCustomerJSON
 	if err := c.Bind(&body); err != nil {
@@ -92,15 +92,15 @@ func toCustomerJSON(customer entity.Customer) customerJSON {
 
 func writeCustomerError(c echo.Context, err error) error {
 	switch {
-	case errors.Is(err, entity.ErrUnauthenticated):
+	case errors.Is(err, rule.ErrUnauthenticated):
 		return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrForbidden):
+	case errors.Is(err, rule.ErrForbidden):
 		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrCustomerNotFound):
+	case errors.Is(err, rule.ErrCustomerNotFound):
 		return c.JSON(http.StatusNotFound, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrInvalidCustomerName),
-		errors.Is(err, entity.ErrInvalidPlan),
-		errors.Is(err, entity.ErrInvalidSLAMinutes):
+	case errors.Is(err, rule.ErrInvalidCustomerName),
+		errors.Is(err, rule.ErrInvalidPlan),
+		errors.Is(err, rule.ErrInvalidSLAMinutes):
 		return c.JSON(http.StatusBadRequest, messageJSON{Message: err.Error()})
 	default:
 		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "顧客を保存できませんでした。しばらくしてから、もう一度試してください"})

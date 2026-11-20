@@ -5,36 +5,38 @@ import (
 	"log"
 
 	"escalator/entity"
-	"escalator/repository"
+	"escalator/port"
+	"escalator/rule"
 )
 
 type SuspendUser struct {
-	users   repository.UserRepository
+	users   port.UserRepository
 	current *CurrentUser
 	screens ScreenConnection
+	audit   *AuditLog
 }
 
-func NewSuspendUser(users repository.UserRepository, current *CurrentUser, screens ScreenConnection) *SuspendUser {
-	return &SuspendUser{users: users, current: current, screens: screens}
+func NewSuspendUser(users port.UserRepository, current *CurrentUser, screens ScreenConnection, audit *AuditLog) *SuspendUser {
+	return &SuspendUser{users: users, current: current, screens: screens, audit: audit}
 }
 
-//管理者だけが利用者を停止し、その人の画面の接続を切る
+// 管理者だけが利用者を停止し、その人の画面の接続を切る
 func (s *SuspendUser) Execute(ctx context.Context, authorization, userID string) (entity.User, error) {
 	actor, err := s.current.Execute(ctx, authorization)
 	if err != nil {
 		return entity.User{}, err
 	}
 	if actor.Role != entity.RoleAdmin {
-		return entity.User{}, entity.ErrForbidden
+		return entity.User{}, rule.ErrForbidden
 	}
 	user, err := s.users.FindByID(ctx, userID)
 	if err != nil {
 		return entity.User{}, err
 	}
 	if actor.ID == user.ID {
-		return entity.User{}, entity.ErrSuspendSelf
+		return entity.User{}, rule.ErrSuspendSelf
 	}
-	suspended, err := user.Suspend()
+	suspended, err := rule.Suspend(user)
 	if err != nil {
 		return entity.User{}, err
 	}
@@ -43,7 +45,8 @@ func (s *SuspendUser) Execute(ctx context.Context, authorization, userID string)
 	}
 	if s.screens != nil {
 		s.screens.CloseUser(suspended.ID)
+		log.Printf("利用者を停止したため、その人の画面の接続を切りました。user_id=%s", suspended.ID)
+		s.audit.Record(ctx, actor.ID, entity.AuditConnectionClosed, "user", suspended.ID, "画面の接続を切りました")
 	}
-	log.Printf("利用者を停止したため、その人の画面の接続を切りました。user_id=%s", suspended.ID)
 	return suspended, nil
 }

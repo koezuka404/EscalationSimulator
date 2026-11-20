@@ -4,11 +4,12 @@ import (
 	"context"
 
 	"escalator/entity"
-	"escalator/repository"
+	"escalator/port"
+	"escalator/rule"
 )
 
-//顧客が1件も無いときだけ、サンプルの顧客を登録する
-func SeedCustomersIfEmpty(ctx context.Context, repo repository.CustomerRepository) error {
+// 顧客が1件も無いときだけ、サンプルの顧客を登録する
+func SeedCustomersIfEmpty(ctx context.Context, repo port.CustomerRepository) error {
 	customers, err := repo.List(ctx)
 	if err != nil {
 		return err
@@ -26,11 +27,11 @@ func SeedCustomersIfEmpty(ctx context.Context, repo repository.CustomerRepositor
 		{name: "サンプル Enterprise", plan: entity.PlanEnterprise},
 	}
 	for _, sample := range samples {
-		slaMinutes, err := entity.DefaultSLAMinutes(sample.plan)
+		slaMinutes, err := rule.DefaultSLAMinutes(sample.plan)
 		if err != nil {
 			return err
 		}
-		customer, err := entity.NewCustomer(sample.name, sample.plan, slaMinutes)
+		customer, err := rule.NewCustomer(sample.name, sample.plan, slaMinutes)
 		if err != nil {
 			return err
 		}

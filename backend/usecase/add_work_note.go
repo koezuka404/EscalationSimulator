@@ -5,7 +5,8 @@ import (
 	"time"
 
 	"escalator/entity"
-	"escalator/repository"
+	"escalator/port"
+	"escalator/rule"
 )
 
 type SavedWorkNote struct {
@@ -17,17 +18,17 @@ type SavedWorkNote struct {
 }
 
 type AddWorkNote struct {
-	tickets repository.TicketRepository
+	tickets port.TicketRepository
 	current *CurrentUser
 }
 
-func NewAddWorkNote(tickets repository.TicketRepository, current *CurrentUser) *AddWorkNote {
+func NewAddWorkNote(tickets port.TicketRepository, current *CurrentUser) *AddWorkNote {
 	return &AddWorkNote{tickets: tickets, current: current}
 }
 
-//対応メモを保存する
+// 対応メモを保存する
 func (a *AddWorkNote) Execute(ctx context.Context, authorization, ticketID, body string) (SavedWorkNote, error) {
-	body, err := entity.WorkNoteText(body)
+	body, err := rule.WorkNoteText(body)
 	if err != nil {
 		return SavedWorkNote{}, err
 	}
@@ -36,13 +37,13 @@ func (a *AddWorkNote) Execute(ctx context.Context, authorization, ticketID, body
 		return SavedWorkNote{}, err
 	}
 	if actor.Role != entity.RoleAgent && actor.Role != entity.RoleAdmin {
-		return SavedWorkNote{}, entity.ErrWorkNoteRole
+		return SavedWorkNote{}, rule.ErrWorkNoteRole
 	}
 	ticket, err := a.tickets.FindByID(ctx, ticketID)
 	if err != nil {
 		return SavedWorkNote{}, err
 	}
-	if err := entity.CanAddWorkNote(actor.Role, actor.ID, ticket); err != nil {
+	if err := rule.CanAddWorkNote(actor.Role, actor.ID, ticket); err != nil {
 		return SavedWorkNote{}, err
 	}
 	saved, err := a.tickets.AddWorkNote(ctx, ticket.ID, actor.ID, body, time.Now())

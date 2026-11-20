@@ -9,6 +9,8 @@ import (
 	"gorm.io/gorm"
 
 	"escalator/entity"
+	"escalator/port"
+	"escalator/rule"
 )
 
 type customerRow struct {
@@ -26,7 +28,7 @@ type customerRepository struct {
 	db *gorm.DB
 }
 
-func NewCustomerRepository(db *gorm.DB) CustomerRepository {
+func NewCustomerRepository(db *gorm.DB) port.CustomerRepository {
 	return &customerRepository{db: db}
 }
 
@@ -49,7 +51,7 @@ func (r *customerRepository) FindByID(ctx context.Context, id string) (entity.Cu
 	var row customerRow
 	err := r.db.WithContext(ctx).First(&row, "id = ?", id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return entity.Customer{}, entity.ErrCustomerNotFound
+		return entity.Customer{}, rule.ErrCustomerNotFound
 	}
 	if err != nil {
 		return entity.Customer{}, err
@@ -79,7 +81,7 @@ func (r *customerRepository) Update(ctx context.Context, customer entity.Custome
 		return result.Error
 	}
 	if result.RowsAffected == 0 {
-		return entity.ErrCustomerNotFound
+		return rule.ErrCustomerNotFound
 	}
 	return nil
 }

@@ -16,7 +16,7 @@ func NewReleaseDisconnectedAgent(release *usecase.ReleaseDisconnectedAgents, eve
 	return &ReleaseDisconnectedAgent{release: release, every: every}
 }
 
-//一定間隔で、接続が切れたままの担当者を離席にする
+// 一定間隔で、接続が切れたままの担当者を離席にする
 func (j *ReleaseDisconnectedAgent) Run(ctx context.Context) {
 	ticker := time.NewTicker(j.every)
 	defer ticker.Stop()

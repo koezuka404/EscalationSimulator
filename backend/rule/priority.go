@@ -1,16 +1,8 @@
-package entity
+package rule
 
-import (
-	"errors"
-	"time"
-)
+import "time"
 
-const WaitMinutesCap = 99
-
-var (
-	ErrInvalidSeverity  = errors.New("緊急度は1、2、3、4のどれかを選んでください")
-	ErrInvalidPlanScore = errors.New("プランの点数は1、2、3のどれかにしてください")
-)
+const waitMinutesCap = 99
 
 //緊急度、プラン、超過、待ち時間から点数を返す
 func PriorityScore(severity, planScore int, createdAt, now time.Time, slaMinutes int, assigned bool) (int, error) {
@@ -23,14 +15,13 @@ func PriorityScore(severity, planScore int, createdAt, now time.Time, slaMinutes
 	if slaMinutes < 1 {
 		return 0, ErrInvalidSLAMinutes
 	}
-
 	waited := elapsedMinutes(createdAt, now)
 	overdue := 0
 	if !assigned && waited >= slaMinutes {
 		overdue = 1
 	}
-	if waited > WaitMinutesCap {
-		waited = WaitMinutesCap
+	if waited > waitMinutesCap {
+		waited = waitMinutesCap
 	}
 	return severity*1_000_000 + overdue*10_000 + planScore*100 + waited, nil
 }

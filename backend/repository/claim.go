@@ -9,6 +9,8 @@ import (
 	"gorm.io/gorm/clause"
 
 	"escalator/entity"
+	"escalator/port"
+	"escalator/rule"
 )
 
 type agentStatusRow struct {
@@ -23,7 +25,7 @@ type claimRepository struct {
 	db *gorm.DB
 }
 
-func NewClaimRepository(db *gorm.DB) ClaimStore {
+func NewClaimRepository(db *gorm.DB) port.ClaimStore {
 	return &claimRepository{db: db}
 }
 
@@ -31,8 +33,8 @@ func MigrateAgentStatuses(db *gorm.DB) error {
 	return db.AutoMigrate(&agentStatusRow{})
 }
 
-//待機中の担当者に点数がいちばん高い対応待ちを渡す
-func (r *claimRepository) ClaimNext(ctx context.Context, agentID string, queue TicketQueue) (entity.Ticket, error) {
+// 待機中の担当者に点数がいちばん高い対応待ちを渡す
+func (r *claimRepository) ClaimNext(ctx context.Context, agentID string, queue port.TicketQueue, overdue func(createdAt time.Time, slaMinutes int, now time.Time) bool) (entity.Ticket, error) {
 	var claimed entity.Ticket
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := ensureAgentAvailable(tx, agentID); err != nil {
@@ -44,7 +46,7 @@ func (r *claimRepository) ClaimNext(ctx context.Context, agentID string, queue T
 			return err
 		}
 		if status.Status != string(entity.AgentAvailable) {
-			return entity.ErrNotWaiting
+			return rule.ErrNotWaiting
 		}
 		var working int64
 		err = tx.Model(&ticketRow{}).Where("assignee_id = ? AND status = ?", agentID, string(entity.TicketInProgress)).Count(&working).Error
@@ -52,16 +54,16 @@ func (r *claimRepository) ClaimNext(ctx context.Context, agentID string, queue T
 			return err
 		}
 		if working > 0 {
-			return entity.ErrAgentBusy
+			return rule.ErrAgentBusy
 		}
 		now := time.Now()
 		for attempt := 0; attempt < 3; attempt++ {
 			id, score, ok, err := popTicket(ctx, queue)
 			if err != nil {
-				return entity.ErrQueueUnavailable
+				return rule.ErrQueueUnavailable
 			}
 			if !ok {
-				return entity.ErrQueueEmpty
+				return rule.ErrQueueEmpty
 			}
 			result := tx.Model(&ticketRow{}).Where("id = ? AND status = ?", id, string(entity.TicketOpen)).Updates(map[string]any{
 				"status":      string(entity.TicketInProgress),
@@ -85,7 +87,7 @@ func (r *claimRepository) ClaimNext(ctx context.Context, agentID string, queue T
 				putTicketBack(ctx, queue, id, score)
 				return err
 			}
-			if err := stampClaimTimes(tx, row, now); err != nil {
+			if err := stampClaimTimes(tx, row, now, overdue); err != nil {
 				putTicketBack(ctx, queue, id, score)
 				return err
 			}
@@ -96,7 +98,7 @@ func (r *claimRepository) ClaimNext(ctx context.Context, agentID string, queue T
 			claimed = toTicket(row)
 			return nil
 		}
-		return entity.ErrQueueUnavailable
+		return rule.ErrQueueMismatch
 	})
 	if err != nil {
 		return entity.Ticket{}, err
@@ -104,19 +106,16 @@ func (r *claimRepository) ClaimNext(ctx context.Context, agentID string, queue T
 	return claimed, nil
 }
 
-//初めて担当が付いた時刻を残し、その時点で約束時間を過ぎていれば印を付ける
-func stampClaimTimes(tx *gorm.DB, row ticketRow, now time.Time) error {
+// 初めて担当が付いた時刻を残し、その時点で約束時間を過ぎていれば印を付ける
+func stampClaimTimes(tx *gorm.DB, row ticketRow, now time.Time, overdue func(createdAt time.Time, slaMinutes int, now time.Time) bool) error {
 	updates := map[string]any{}
 	if row.FirstClaimedAt == nil {
 		updates["first_claimed_at"] = now
 	}
 	var customer customerRow
 	err := tx.Select("sla_minutes").First(&customer, "id = ?", row.CustomerID).Error
-	if err == nil {
-		_, _, _, overdue := entity.SLAProgress(row.CreatedAt, now, customer.SLAMinutes, false)
-		if overdue {
-			updates["overdue_claimed_at"] = now
-		}
+	if err == nil && overdue != nil && overdue(row.CreatedAt, customer.SLAMinutes, now) {
+		updates["overdue_claimed_at"] = now
 	}
 	if len(updates) == 0 {
 		return nil
@@ -129,13 +128,13 @@ func ensureAgentAvailable(tx *gorm.DB, agentID string) error {
 	return tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "user_id"}}, DoNothing: true}).Create(&row).Error
 }
 
-func popTicket(ctx context.Context, queue TicketQueue) (string, int, bool, error) {
+func popTicket(ctx context.Context, queue port.TicketQueue) (string, int, bool, error) {
 	popCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	return queue.PopMax(popCtx)
 }
 
-func putTicketBack(ctx context.Context, queue TicketQueue, ticketID string, score int) {
+func putTicketBack(ctx context.Context, queue port.TicketQueue, ticketID string, score int) {
 	putCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	if err := queue.Enqueue(putCtx, ticketID, score); err != nil {

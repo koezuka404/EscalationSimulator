@@ -6,20 +6,20 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	"escalator/entity"
+	"escalator/rule"
 	"escalator/usecase"
 )
 
 type QueueAPI struct {
-	list  *usecase.ListWaitingTickets
-	claim *usecase.ClaimNextTicket
+	list  listWaitingUsecase
+	claim claimTicketUsecase
 }
 
-func NewQueueAPI(list *usecase.ListWaitingTickets, claim *usecase.ClaimNextTicket) *QueueAPI {
+func NewQueueAPI(list listWaitingUsecase, claim claimTicketUsecase) *QueueAPI {
 	return &QueueAPI{list: list, claim: claim}
 }
 
-//待ち順の一覧を返す
+// 待ち順の一覧を返す
 func (a *QueueAPI) List(c echo.Context) error {
 	waiting, err := a.list.Execute(c.Request().Context(), c.Request().Header.Get("Authorization"))
 	if err != nil {
@@ -32,7 +32,7 @@ func (a *QueueAPI) List(c echo.Context) error {
 	return c.JSON(http.StatusOK, body)
 }
 
-//次の1件の引き取りを受ける
+// 次の1件の引き取りを受ける
 func (a *QueueAPI) Claim(c echo.Context) error {
 	ticket, err := a.claim.Execute(c.Request().Context(), c.Request().Header.Get("Authorization"))
 	if err != nil {
@@ -73,9 +73,9 @@ func toWaitingTicketJSON(ticket usecase.WaitingTicket) waitingTicketJSON {
 
 func writeQueueError(c echo.Context, err error) error {
 	switch {
-	case errors.Is(err, entity.ErrUnauthenticated):
+	case errors.Is(err, rule.ErrUnauthenticated):
 		return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrQueueForbidden):
+	case errors.Is(err, rule.ErrQueueForbidden):
 		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
 	default:
 		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "待ち順を表示できませんでした。しばらくしてから、もう一度試してください"})
@@ -84,15 +84,15 @@ func writeQueueError(c echo.Context, err error) error {
 
 func writeClaimError(c echo.Context, err error) error {
 	switch {
-	case errors.Is(err, entity.ErrUnauthenticated):
+	case errors.Is(err, rule.ErrUnauthenticated):
 		return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrClaimAgent):
+	case errors.Is(err, rule.ErrClaimAgent):
 		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrNotWaiting),
-		errors.Is(err, entity.ErrAgentBusy),
-		errors.Is(err, entity.ErrQueueEmpty):
+	case errors.Is(err, rule.ErrNotWaiting),
+		errors.Is(err, rule.ErrAgentBusy),
+		errors.Is(err, rule.ErrQueueEmpty):
 		return c.JSON(http.StatusConflict, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrQueueUnavailable):
+	case errors.Is(err, rule.ErrQueueUnavailable):
 		return c.JSON(http.StatusServiceUnavailable, messageJSON{Message: err.Error()})
 	default:
 		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "チケットを引き取れませんでした。しばらくしてから、もう一度試してください"})

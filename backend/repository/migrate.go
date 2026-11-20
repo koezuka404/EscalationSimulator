@@ -31,5 +31,11 @@ func Migrate(db *gorm.DB) error {
 	if err := MigrateDemoRuns(db); err != nil {
 		return fmt.Errorf("デモ用のテーブルを作成できませんでした: %w", err)
 	}
+	if err := MigrateAuditLogs(db); err != nil {
+		return fmt.Errorf("操作の記録用のテーブルを作成できませんでした: %w", err)
+	}
+	if err := MigrateRequestLogs(db); err != nil {
+		return fmt.Errorf("受け付けた操作の記録用のテーブルを作成できませんでした: %w", err)
+	}
 	return nil
 }

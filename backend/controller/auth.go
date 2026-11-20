@@ -9,21 +9,21 @@ import (
 
 	"escalator/entity"
 	"escalator/middleware"
-	"escalator/usecase"
+	"escalator/rule"
 )
 
 type AuthAPI struct {
-	signUp            *usecase.SignUp
-	logIn             *usecase.LogIn
-	logOut            *usecase.LogOut
-	refresh           *usecase.Refresh
+	signUp            signUpUsecase
+	logIn             logInUsecase
+	logOut            logOutUsecase
+	refresh           refreshUsecase
 	refreshCookieName string
 	csrfCookieName    string
 	cookieSecure      bool
 	refreshTTL        int
 }
 
-func NewAuthAPI(signUp *usecase.SignUp, logIn *usecase.LogIn, logOut *usecase.LogOut, refresh *usecase.Refresh, refreshCookieName, csrfCookieName string, cookieSecure bool, refreshTTLSeconds int) *AuthAPI {
+func NewAuthAPI(signUp signUpUsecase, logIn logInUsecase, logOut logOutUsecase, refresh refreshUsecase, refreshCookieName, csrfCookieName string, cookieSecure bool, refreshTTLSeconds int) *AuthAPI {
 	return &AuthAPI{
 		signUp:            signUp,
 		logIn:             logIn,
@@ -36,7 +36,7 @@ func NewAuthAPI(signUp *usecase.SignUp, logIn *usecase.LogIn, logOut *usecase.Lo
 	}
 }
 
-//会員登録を受ける
+// 会員登録を受ける
 func (a *AuthAPI) Register(c echo.Context) error {
 	var body registerJSON
 	if err := c.Bind(&body); err != nil {
@@ -49,7 +49,7 @@ func (a *AuthAPI) Register(c echo.Context) error {
 	return c.JSON(http.StatusCreated, toUserJSON(user))
 }
 
-//ログインを受ける
+// ログインを受ける
 func (a *AuthAPI) Login(c echo.Context) error {
 	var body loginJSON
 	if err := c.Bind(&body); err != nil {
@@ -68,7 +68,7 @@ func (a *AuthAPI) Login(c echo.Context) error {
 	})
 }
 
-//ログアウトを受ける
+// ログアウトを受ける
 func (a *AuthAPI) Logout(c echo.Context) error {
 	if err := middleware.Allow(c.Request(), a.csrfCookieName); err != nil {
 		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
@@ -85,7 +85,7 @@ func (a *AuthAPI) Logout(c echo.Context) error {
 	return c.JSON(http.StatusOK, messageJSON{Message: "ログアウトしました"})
 }
 
-//ログイン用トークンの再発行を受ける
+// ログイン用トークンの再発行を受ける
 func (a *AuthAPI) Refresh(c echo.Context) error {
 	if err := middleware.Allow(c.Request(), a.csrfCookieName); err != nil {
 		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
@@ -146,11 +146,11 @@ func toUserJSON(user entity.User) userJSON {
 
 func writeSignUpError(c echo.Context, err error) error {
 	switch {
-	case errors.Is(err, entity.ErrInvalidUserName),
-		errors.Is(err, entity.ErrInvalidEmail),
-		errors.Is(err, entity.ErrInvalidPassword):
+	case errors.Is(err, rule.ErrInvalidUserName),
+		errors.Is(err, rule.ErrInvalidEmail),
+		errors.Is(err, rule.ErrInvalidPassword):
 		return c.JSON(http.StatusBadRequest, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrEmailTaken):
+	case errors.Is(err, rule.ErrEmailTaken):
 		return c.JSON(http.StatusConflict, messageJSON{Message: err.Error()})
 	default:
 		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "登録できませんでした。しばらくしてから、もう一度試してください"})
@@ -158,7 +158,7 @@ func writeSignUpError(c echo.Context, err error) error {
 }
 
 func writeRefreshError(c echo.Context, api *AuthAPI, err error) error {
-	if errors.Is(err, entity.ErrInvalidRefresh) {
+	if errors.Is(err, rule.ErrInvalidRefresh) {
 		c.SetCookie(sessionCookie(api.refreshCookieName, "", -1, true, api.cookieSecure))
 		c.SetCookie(sessionCookie(api.csrfCookieName, "", -1, false, api.cookieSecure))
 		return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})
@@ -168,9 +168,9 @@ func writeRefreshError(c echo.Context, api *AuthAPI, err error) error {
 
 func writeLoginError(c echo.Context, err error) error {
 	switch {
-	case errors.Is(err, entity.ErrLoginFailed):
+	case errors.Is(err, rule.ErrLoginFailed):
 		return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrLoginLocked):
+	case errors.Is(err, rule.ErrLoginLocked):
 		return c.JSON(http.StatusTooManyRequests, messageJSON{Message: err.Error()})
 	default:
 		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "ログインできませんでした。しばらくしてから、もう一度試してください"})

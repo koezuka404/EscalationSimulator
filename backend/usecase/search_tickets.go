@@ -5,7 +5,8 @@ import (
 	"time"
 
 	"escalator/entity"
-	"escalator/repository"
+	"escalator/port"
+	"escalator/rule"
 )
 
 type FoundTicket struct {
@@ -26,28 +27,28 @@ type FoundTicket struct {
 }
 
 type SearchTickets struct {
-	tickets   repository.TicketRepository
-	customers repository.CustomerRepository
-	users     repository.UserRepository
+	tickets   port.TicketRepository
+	customers port.CustomerRepository
+	users     port.UserRepository
 	current   *CurrentUser
 }
 
-func NewSearchTickets(tickets repository.TicketRepository, customers repository.CustomerRepository, users repository.UserRepository, current *CurrentUser) *SearchTickets {
+func NewSearchTickets(tickets port.TicketRepository, customers port.CustomerRepository, users port.UserRepository, current *CurrentUser) *SearchTickets {
 	return &SearchTickets{tickets: tickets, customers: customers, users: users, current: current}
 }
 
-//管理者に、条件に合うチケットを更新が新しい順で返す
+// 管理者に、条件に合うチケットを更新が新しい順で返す
 func (s *SearchTickets) Execute(ctx context.Context, authorization, status string, severity int, customerID, assigneeID string) ([]FoundTicket, error) {
 	actor, err := s.current.Execute(ctx, authorization)
 	if err != nil {
 		return nil, err
 	}
 	if actor.Role != entity.RoleAdmin {
-		return nil, entity.ErrForbidden
+		return nil, rule.ErrForbidden
 	}
-	filter := repository.TicketFilter{CustomerID: customerID, AssigneeID: assigneeID}
+	filter := port.TicketFilter{CustomerID: customerID, AssigneeID: assigneeID}
 	if status != "" {
-		parsed, err := entity.ParseTicketStatus(status)
+		parsed, err := rule.ParseTicketStatus(status)
 		if err != nil {
 			return nil, err
 		}
@@ -55,7 +56,7 @@ func (s *SearchTickets) Execute(ctx context.Context, authorization, status strin
 	}
 	if severity != 0 {
 		if severity < 1 || severity > 4 {
-			return nil, entity.ErrInvalidSeverity
+			return nil, rule.ErrInvalidSeverity
 		}
 		filter.Severity = severity
 	}
@@ -79,7 +80,7 @@ func (s *SearchTickets) Execute(ctx context.Context, authorization, status strin
 	found := make([]FoundTicket, 0, len(tickets))
 	for _, ticket := range tickets {
 		customer := byCustomer[ticket.CustomerID]
-		_, remaining, overdueMinutes, overdue := entity.SLAProgress(ticket.CreatedAt, now, customer.SLAMinutes, ticket.AssigneeID != "")
+		_, remaining, overdueMinutes, overdue := rule.SLAProgress(ticket.CreatedAt, now, customer.SLAMinutes, ticket.AssigneeID != "")
 		if remaining < 0 {
 			remaining = 0
 		}

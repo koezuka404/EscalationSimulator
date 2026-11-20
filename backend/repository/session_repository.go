@@ -10,6 +10,8 @@ import (
 	"gorm.io/gorm/clause"
 
 	"escalator/entity"
+	"escalator/port"
+	"escalator/rule"
 )
 
 type sessionRow struct {
@@ -28,7 +30,7 @@ type sessionRepository struct {
 	db *gorm.DB
 }
 
-func NewSessionRepository(db *gorm.DB) SessionRepository {
+func NewSessionRepository(db *gorm.DB) port.SessionRepository {
 	return &sessionRepository{db: db}
 }
 
@@ -54,12 +56,12 @@ func (r *sessionRepository) RevokeByHash(ctx context.Context, tokenHash string) 
 	return r.db.WithContext(ctx).Model(&sessionRow{}).Where("token_hash = ?", tokenHash).Update("revoked", true).Error
 }
 
-//再ログイン用の印から利用者IDを返す
+// 再ログイン用の印から利用者IDを返す
 func (r *sessionRepository) FindUserIDByHash(ctx context.Context, tokenHash string) (string, error) {
 	var row sessionRow
 	err := r.db.WithContext(ctx).Where("token_hash = ?", tokenHash).First(&row).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return "", entity.ErrInvalidRefresh
+		return "", rule.ErrInvalidRefresh
 	}
 	if err != nil {
 		return "", err
@@ -67,7 +69,7 @@ func (r *sessionRepository) FindUserIDByHash(ctx context.Context, tokenHash stri
 	return row.UserID, nil
 }
 
-//再ログイン用の印を新しい印に替える古い印の再使用は系統ごと無効にする
+// 再ログイン用の印を新しい印に替える古い印の再使用は系統ごと無効にする
 func (r *sessionRepository) Rotate(ctx context.Context, oldHash string, next entity.Session, now time.Time) (string, bool, error) {
 	var userID string
 	var reused bool
@@ -75,7 +77,7 @@ func (r *sessionRepository) Rotate(ctx context.Context, oldHash string, next ent
 		var row sessionRow
 		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("token_hash = ?", oldHash).First(&row).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return entity.ErrInvalidRefresh
+			return rule.ErrInvalidRefresh
 		}
 		if err != nil {
 			return err
@@ -86,7 +88,7 @@ func (r *sessionRepository) Rotate(ctx context.Context, oldHash string, next ent
 			return tx.Model(&sessionRow{}).Where("family_id = ?", row.FamilyID).Update("revoked", true).Error
 		}
 		if !row.ExpiresAt.After(now) {
-			return entity.ErrInvalidRefresh
+			return rule.ErrInvalidRefresh
 		}
 		if err := tx.Model(&sessionRow{}).Where("id = ?", row.ID).Update("revoked", true).Error; err != nil {
 			return err

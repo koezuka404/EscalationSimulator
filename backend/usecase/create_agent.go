@@ -6,29 +6,30 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"escalator/entity"
-	"escalator/repository"
+	"escalator/port"
+	"escalator/rule"
 )
 
 type CreateAgent struct {
-	users   repository.UserRepository
+	users   port.UserRepository
 	current *CurrentUser
 	cost    int
 }
 
-func NewCreateAgent(users repository.UserRepository, current *CurrentUser, cost int) *CreateAgent {
+func NewCreateAgent(users port.UserRepository, current *CurrentUser, cost int) *CreateAgent {
 	return &CreateAgent{users: users, current: current, cost: cost}
 }
 
-//管理者が担当者を登録する
+// 管理者が担当者を登録する
 func (c *CreateAgent) Execute(ctx context.Context, authorization, name, email, password string) (entity.User, error) {
 	actor, err := c.current.Execute(ctx, authorization)
 	if err != nil {
 		return entity.User{}, err
 	}
 	if actor.Role != entity.RoleAdmin {
-		return entity.User{}, entity.ErrForbidden
+		return entity.User{}, rule.ErrForbidden
 	}
-	user, err := entity.NewAgent(name, email, password)
+	user, err := rule.NewAgent(name, email, password)
 	if err != nil {
 		return entity.User{}, err
 	}

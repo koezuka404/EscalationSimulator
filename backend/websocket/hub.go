@@ -14,6 +14,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"escalator/entity"
+	"escalator/rule"
 	"escalator/usecase"
 )
 
@@ -75,7 +76,7 @@ func NewHub(current *usecase.CurrentUser, snapshot *usecase.QueueSnapshot, dashb
 	return hub
 }
 
-//つながっている画面へ知らせを配る
+// つながっている画面へ知らせを配る
 func (h *Hub) Run() {
 	for {
 		select {
@@ -108,7 +109,7 @@ func (h *Hub) Run() {
 	}
 }
 
-//指定した利用者の画面の接続を切る
+// 指定した利用者の画面の接続を切る
 func (h *Hub) CloseUser(userID string) {
 	if userID == "" {
 		return
@@ -127,7 +128,7 @@ func (h *Hub) dropUser(userID string) {
 	}
 }
 
-//保存が済んだあとの知らせを、つながっている画面へ届ける
+// 保存が済んだあとの知らせを、つながっている画面へ届ける
 func (h *Hub) Send(message usecase.Message) {
 	h.enqueue(outbound{message: message})
 }
@@ -174,7 +175,7 @@ func (h *Hub) markGone(userID string) {
 	h.goneSince[userID] = time.Now()
 }
 
-//接続が切れたまま、指定時刻まで戻っていない担当者を返す
+// 接続が切れたまま、指定時刻まで戻っていない担当者を返す
 func (h *Hub) AgentsGoneSince(before time.Time) []string {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -187,7 +188,7 @@ func (h *Hub) AgentsGoneSince(before time.Time) []string {
 	return ids
 }
 
-//担当者の接続が、まだすべて切れたままかを返す
+// 担当者の接続が、まだすべて切れたままかを返す
 func (h *Hub) StillGone(userID string) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -195,7 +196,7 @@ func (h *Hub) StillGone(userID string) bool {
 	return ok
 }
 
-//担当者が戻った、または離席にしたあと、切れた記録を消す
+// 担当者が戻った、または離席にしたあと、切れた記録を消す
 func (h *Hub) ForgetGone(userID string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -215,15 +216,15 @@ func (c *client) wants(message usecase.Message) bool {
 	return message.ApplicantID != "" && c.role == entity.RoleApplicant && c.userID == message.ApplicantID
 }
 
-//ログインを確かめて接続し、担当者と管理者には今の待ち順と稼働を送る
+// ログインを確かめて接続し、担当者と管理者には今の待ち順と稼働を送る
 func (h *Hub) Serve(c echo.Context) error {
 	token := accessToken(c)
 	if token == "" {
-		return c.JSON(http.StatusUnauthorized, map[string]string{"message": entity.ErrUnauthenticated.Error()})
+		return c.JSON(http.StatusUnauthorized, map[string]string{"message": rule.ErrUnauthenticated.Error()})
 	}
 	actor, err := h.current.Execute(c.Request().Context(), "Bearer "+token)
 	if err != nil {
-		if errors.Is(err, entity.ErrUnauthenticated) {
+		if errors.Is(err, rule.ErrUnauthenticated) {
 			return c.JSON(http.StatusUnauthorized, map[string]string{"message": err.Error()})
 		}
 		return c.JSON(http.StatusInternalServerError, map[string]string{"message": "ログインを確認できませんでした。しばらくしてから、もう一度試してください"})

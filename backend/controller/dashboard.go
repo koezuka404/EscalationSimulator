@@ -6,19 +6,19 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	"escalator/entity"
+	"escalator/rule"
 	"escalator/usecase"
 )
 
 type DashboardAPI struct {
-	show *usecase.ShowDashboard
+	show showDashboardUsecase
 }
 
-func NewDashboardAPI(show *usecase.ShowDashboard) *DashboardAPI {
+func NewDashboardAPI(show showDashboardUsecase) *DashboardAPI {
 	return &DashboardAPI{show: show}
 }
 
-//管理者に現場の数字を返す
+// 管理者に現場の数字を返す
 func (a *DashboardAPI) Show(c echo.Context) error {
 	numbers, err := a.show.Execute(c.Request().Context(), c.Request().Header.Get("Authorization"))
 	if err != nil {
@@ -55,9 +55,9 @@ func toDashboardJSON(numbers usecase.Dashboard) dashboardJSON {
 
 func writeDashboardError(c echo.Context, err error) error {
 	switch {
-	case errors.Is(err, entity.ErrUnauthenticated):
+	case errors.Is(err, rule.ErrUnauthenticated):
 		return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrForbidden):
+	case errors.Is(err, rule.ErrForbidden):
 		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
 	default:
 		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "現場の数字をまとめられませんでした。しばらくしてから、もう一度試してください"})

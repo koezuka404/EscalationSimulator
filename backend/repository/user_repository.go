@@ -10,6 +10,8 @@ import (
 	"gorm.io/gorm"
 
 	"escalator/entity"
+	"escalator/port"
+	"escalator/rule"
 )
 
 type userRow struct {
@@ -33,7 +35,7 @@ type userRepository struct {
 	db *gorm.DB
 }
 
-func NewUserRepository(db *gorm.DB) UserRepository {
+func NewUserRepository(db *gorm.DB) port.UserRepository {
 	return &userRepository{db: db}
 }
 
@@ -49,14 +51,14 @@ func (r *userRepository) Save(ctx context.Context, user entity.User) (entity.Use
 	if err := r.db.WithContext(ctx).Create(&row).Error; err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			return entity.User{}, entity.ErrEmailTaken
+			return entity.User{}, rule.ErrEmailTaken
 		}
 		return entity.User{}, err
 	}
 	return userFromRow(row), nil
 }
 
-//担当者を保存し、稼働を待機中で作る
+// 担当者を保存し、稼働を待機中で作る
 func (r *userRepository) SaveAgent(ctx context.Context, user entity.User) (entity.User, error) {
 	if user.ID == "" {
 		user.ID = uuid.NewString()
@@ -76,7 +78,7 @@ func (r *userRepository) SaveAgent(ctx context.Context, user entity.User) (entit
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			return entity.User{}, entity.ErrEmailTaken
+			return entity.User{}, rule.ErrEmailTaken
 		}
 		return entity.User{}, err
 	}
@@ -87,7 +89,7 @@ func (r *userRepository) FindByID(ctx context.Context, id string) (entity.User, 
 	var row userRow
 	err := r.db.WithContext(ctx).First(&row, "id = ?", id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return entity.User{}, entity.ErrUserNotFound
+		return entity.User{}, rule.ErrUserNotFound
 	}
 	if err != nil {
 		return entity.User{}, err
@@ -99,7 +101,7 @@ func (r *userRepository) FindByEmail(ctx context.Context, email string) (entity.
 	var row userRow
 	err := r.db.WithContext(ctx).First(&row, "email = ?", email).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return entity.User{}, entity.ErrUserNotFound
+		return entity.User{}, rule.ErrUserNotFound
 	}
 	if err != nil {
 		return entity.User{}, err
@@ -129,12 +131,12 @@ func (r *userRepository) UpdateCustomer(ctx context.Context, user entity.User) e
 		return result.Error
 	}
 	if result.RowsAffected == 0 {
-		return entity.ErrUserNotFound
+		return rule.ErrUserNotFound
 	}
 	return nil
 }
 
-//利用者の状態と認証の版を保存する
+// 利用者の状態と認証の版を保存する
 func (r *userRepository) UpdateStatus(ctx context.Context, user entity.User) error {
 	result := r.db.WithContext(ctx).Model(&userRow{}).Where("id = ?", user.ID).Updates(map[string]any{
 		"status":       string(user.Status),
@@ -144,12 +146,12 @@ func (r *userRepository) UpdateStatus(ctx context.Context, user entity.User) err
 		return result.Error
 	}
 	if result.RowsAffected == 0 {
-		return entity.ErrUserNotFound
+		return rule.ErrUserNotFound
 	}
 	return nil
 }
 
-//役割と所属顧客と認証の版を保存し、担当者には稼働を作り、申請者にしたときは稼働を消す
+// 役割と所属顧客と認証の版を保存し、担当者には稼働を作り、申請者にしたときは稼働を消す
 func (r *userRepository) UpdateRole(ctx context.Context, user entity.User) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		result := tx.Model(&userRow{}).Where("id = ?", user.ID).Updates(map[string]any{
@@ -161,7 +163,7 @@ func (r *userRepository) UpdateRole(ctx context.Context, user entity.User) error
 			return result.Error
 		}
 		if result.RowsAffected == 0 {
-			return entity.ErrUserNotFound
+			return rule.ErrUserNotFound
 		}
 		if user.Role == entity.RoleAgent {
 			return ensureAgentAvailable(tx, user.ID)
@@ -173,7 +175,7 @@ func (r *userRepository) UpdateRole(ctx context.Context, user entity.User) error
 	})
 }
 
-//利用者を削除済みにし、メールアドレスと認証の版を保存し、稼働の記録を消す
+// 利用者を削除済みにし、メールアドレスと認証の版を保存し、稼働の記録を消す
 func (r *userRepository) MarkDeleted(ctx context.Context, user entity.User) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		result := tx.Model(&userRow{}).Where("id = ? AND status = ?", user.ID, string(entity.StatusSuspended)).Updates(map[string]any{
@@ -185,20 +187,20 @@ func (r *userRepository) MarkDeleted(ctx context.Context, user entity.User) erro
 			return result.Error
 		}
 		if result.RowsAffected == 0 {
-			return entity.ErrUserNotFound
+			return rule.ErrUserNotFound
 		}
 		return tx.Where("user_id = ?", user.ID).Delete(&agentStatusRow{}).Error
 	})
 }
 
-//利用者の人数を返す
+// 利用者の人数を返す
 func (r *userRepository) Count(ctx context.Context) (int, error) {
 	var count int64
 	err := r.db.WithContext(ctx).Model(&userRow{}).Count(&count).Error
 	return int(count), err
 }
 
-//削除済み以外の利用者を名前順で返す
+// 削除済み以外の利用者を名前順で返す
 func (r *userRepository) List(ctx context.Context) ([]entity.User, error) {
 	var rows []userRow
 	err := r.db.WithContext(ctx).
@@ -216,7 +218,7 @@ func (r *userRepository) List(ctx context.Context) ([]entity.User, error) {
 	return users, nil
 }
 
-//顧客に結びついている申請者を返す
+// 顧客に結びついている申請者を返す
 func (r *userRepository) ListApplicants(ctx context.Context) ([]entity.User, error) {
 	var rows []userRow
 	err := r.db.WithContext(ctx).
@@ -233,7 +235,7 @@ func (r *userRepository) ListApplicants(ctx context.Context) ([]entity.User, err
 	return users, nil
 }
 
-//利用者IDから名前を返す
+// 利用者IDから名前を返す
 func (r *userRepository) ListNames(ctx context.Context, ids []string) (map[string]string, error) {
 	names := make(map[string]string, len(ids))
 	if len(ids) == 0 {

@@ -2,23 +2,38 @@ package usecase
 
 import (
 	"context"
+	"errors"
 
-	"escalator/repository"
+	"escalator/entity"
+	"escalator/port"
+	"escalator/rule"
 	"escalator/usecase/crypto"
 )
 
 type LogOut struct {
-	sessions repository.SessionRepository
+	sessions port.SessionRepository
+	audit    *AuditLog
 }
 
-func NewLogOut(sessions repository.SessionRepository) *LogOut {
-	return &LogOut{sessions: sessions}
+func NewLogOut(sessions port.SessionRepository, audit *AuditLog) *LogOut {
+	return &LogOut{sessions: sessions, audit: audit}
 }
 
-//再ログイン用の印を無効にする
+// 再ログイン用の印を無効にする
 func (l *LogOut) Execute(ctx context.Context, refreshToken string) error {
 	if refreshToken == "" {
 		return nil
 	}
-	return l.sessions.RevokeByHash(ctx, crypto.Hash(refreshToken))
+	hash := crypto.Hash(refreshToken)
+	userID, err := l.sessions.FindUserIDByHash(ctx, hash)
+	if err != nil && !errors.Is(err, rule.ErrInvalidRefresh) {
+		return err
+	}
+	if err := l.sessions.RevokeByHash(ctx, hash); err != nil {
+		return err
+	}
+	if userID != "" {
+		l.audit.Record(ctx, userID, entity.AuditLogout, "user", userID, "ログアウトしました")
+	}
+	return nil
 }

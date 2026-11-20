@@ -10,21 +10,23 @@ import (
 	"time"
 
 	"escalator/entity"
-	"escalator/repository"
+	"escalator/port"
+	"escalator/rule"
 )
 
 type RunDemo struct {
-	users     repository.UserRepository
-	customers repository.CustomerRepository
-	demos     repository.DemoRepository
+	users     port.UserRepository
+	customers port.CustomerRepository
+	demos     port.DemoRepository
 	create    *CreateTicket
 	notices   Notifier
 	base      context.Context
+	audit     *AuditLog
 	mu        sync.Mutex
 	cancels   map[string]context.CancelFunc
 }
 
-func NewRunDemo(users repository.UserRepository, customers repository.CustomerRepository, demos repository.DemoRepository, create *CreateTicket, notices Notifier, base context.Context) *RunDemo {
+func NewRunDemo(users port.UserRepository, customers port.CustomerRepository, demos port.DemoRepository, create *CreateTicket, notices Notifier, base context.Context, audit *AuditLog) *RunDemo {
 	if base == nil {
 		base = context.Background()
 	}
@@ -35,25 +37,26 @@ func NewRunDemo(users repository.UserRepository, customers repository.CustomerRe
 		create:    create,
 		notices:   notices,
 		base:      base,
+		audit:     audit,
 		cancels:   make(map[string]context.CancelFunc),
 	}
 }
 
-//前回の起動で残った実行中のデモを止める
+// 前回の起動で残った実行中のデモを止める
 func (d *RunDemo) Recover(ctx context.Context) error {
 	return d.demos.CloseInterrupted(ctx, time.Now())
 }
 
-//管理者がデモを始め、間隔をあけて通常の起票と同じ道で問い合わせを作る
+// 管理者がデモを始め、間隔をあけて通常の起票と同じ道で問い合わせを作る
 func (d *RunDemo) Start(ctx context.Context, authorization string, count, intervalSec int, distribution string) (entity.DemoRun, error) {
 	actor, err := d.create.current.Execute(ctx, authorization)
 	if err != nil {
 		return entity.DemoRun{}, err
 	}
 	if actor.Role != entity.RoleAdmin {
-		return entity.DemoRun{}, entity.ErrForbidden
+		return entity.DemoRun{}, rule.ErrForbidden
 	}
-	if err := entity.ValidateDemo(count, intervalSec, distribution); err != nil {
+	if err := rule.ValidateDemo(count, intervalSec, distribution); err != nil {
 		return entity.DemoRun{}, err
 	}
 	applicants, err := d.users.ListApplicants(ctx)
@@ -67,7 +70,7 @@ func (d *RunDemo) Start(ctx context.Context, authorization string, count, interv
 	grouped := applicantsByCustomer(applicants)
 	eligible := eligibleCustomers(customers, grouped)
 	if len(eligible) == 0 {
-		return entity.DemoRun{}, entity.ErrDemoNeedsApplicant
+		return entity.DemoRun{}, rule.ErrDemoNeedsApplicant
 	}
 	run, err := d.demos.Start(ctx, entity.DemoRun{
 		StartedBy:    actor.ID,
@@ -82,17 +85,18 @@ func (d *RunDemo) Start(ctx context.Context, authorization string, count, interv
 	loopCtx, cancel := context.WithCancel(d.base)
 	d.track(run.ID, cancel)
 	go d.generate(loopCtx, cancel, run, eligible, grouped)
+	d.audit.Record(ctx, actor.ID, entity.AuditDemoStarted, "demo", run.ID, "デモを開始しました")
 	return run, nil
 }
 
-//実行中のデモを止めるすでに作った問い合わせはそのまま残す
+// 実行中のデモを止めるすでに作った問い合わせはそのまま残す
 func (d *RunDemo) Stop(ctx context.Context, authorization string) (entity.DemoRun, error) {
 	actor, err := d.create.current.Execute(ctx, authorization)
 	if err != nil {
 		return entity.DemoRun{}, err
 	}
 	if actor.Role != entity.RoleAdmin {
-		return entity.DemoRun{}, entity.ErrForbidden
+		return entity.DemoRun{}, rule.ErrForbidden
 	}
 	run, err := d.demos.StopRunning(ctx, time.Now())
 	if err != nil {
@@ -100,6 +104,7 @@ func (d *RunDemo) Stop(ctx context.Context, authorization string) (entity.DemoRu
 	}
 	d.cancelRun(run.ID)
 	d.notify(run)
+	d.audit.Record(ctx, actor.ID, entity.AuditDemoStopped, "demo", run.ID, "デモを止めました")
 	return run, nil
 }
 
@@ -127,7 +132,7 @@ func (d *RunDemo) generate(ctx context.Context, cancel context.CancelFunc, run e
 		if err != nil {
 			log.Printf("デモの問い合わせを作れませんでした。続きは作ります。%d件目: %v", i+1, err)
 		} else if updated, err := d.demos.AddGenerated(context.Background(), run.ID); err != nil {
-			if errors.Is(err, entity.ErrDemoNotRunning) {
+			if errors.Is(err, rule.ErrDemoNotRunning) {
 				return
 			}
 			log.Printf("デモで作った件数を保存できませんでした。問い合わせは作ってあります。%d件目: %v", i+1, err)

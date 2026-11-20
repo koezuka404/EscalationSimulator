@@ -6,19 +6,18 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	"escalator/entity"
-	"escalator/usecase"
+	"escalator/rule"
 )
 
 type AgentAPI struct {
-	status *usecase.ChangeAgentStatus
+	status changeAgentStatusUsecase
 }
 
-func NewAgentAPI(status *usecase.ChangeAgentStatus) *AgentAPI {
+func NewAgentAPI(status changeAgentStatusUsecase) *AgentAPI {
 	return &AgentAPI{status: status}
 }
 
-//稼働の切り替えを受ける
+// 稼働の切り替えを受ける
 func (a *AgentAPI) Update(c echo.Context) error {
 	var body agentStatusJSON
 	if err := c.Bind(&body); err != nil {
@@ -38,18 +37,18 @@ type agentStatusJSON struct {
 
 func writeAgentStatusError(c echo.Context, err error) error {
 	switch {
-	case errors.Is(err, entity.ErrUnauthenticated):
+	case errors.Is(err, rule.ErrUnauthenticated):
 		return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrAvailabilityRole),
-		errors.Is(err, entity.ErrAvailabilityOthers):
+	case errors.Is(err, rule.ErrAvailabilityRole),
+		errors.Is(err, rule.ErrAvailabilityOthers):
 		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrUserNotFound),
-		errors.Is(err, entity.ErrCustomerNotFound):
+	case errors.Is(err, rule.ErrUserNotFound),
+		errors.Is(err, rule.ErrCustomerNotFound):
 		return c.JSON(http.StatusNotFound, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrCannotBecomeAvailable):
+	case errors.Is(err, rule.ErrCannotBecomeAvailable):
 		return c.JSON(http.StatusConflict, messageJSON{Message: err.Error()})
-	case errors.Is(err, entity.ErrInvalidAvailability),
-		errors.Is(err, entity.ErrAvailabilityOfflineOnly):
+	case errors.Is(err, rule.ErrInvalidAvailability),
+		errors.Is(err, rule.ErrAvailabilityOfflineOnly):
 		return c.JSON(http.StatusBadRequest, messageJSON{Message: err.Error()})
 	default:
 		return c.JSON(http.StatusInternalServerError, messageJSON{Message: "稼働を切り替えられませんでした。しばらくしてから、もう一度試してください"})

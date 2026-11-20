@@ -22,14 +22,14 @@ func (b *Bus) Origin() string {
 	return b.origin
 }
 
-//他のサーバーへ知らせの中身を渡す
+// 他のサーバーへ知らせの中身を渡す
 func (b *Bus) Publish(ctx context.Context, channel string, payload []byte) error {
 	pubCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	return b.client.Publish(pubCtx, channel, payload).Err()
 }
 
-//他のサーバーからの知らせを受け取る
+// 他のサーバーからの知らせを受け取る
 func (b *Bus) Listen(ctx context.Context, channels []string, on func(channel string, payload []byte)) {
 	for {
 		if ctx.Err() != nil {

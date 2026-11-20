@@ -10,13 +10,14 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"escalator/entity"
-	"escalator/repository"
+	"escalator/port"
+	"escalator/rule"
 	"escalator/usecase/crypto"
 )
 
 type LogIn struct {
-	users       repository.UserRepository
-	sessions    repository.SessionRepository
+	users       port.UserRepository
+	sessions    port.SessionRepository
 	secret      []byte
 	issuer      string
 	audience    string
@@ -24,6 +25,7 @@ type LogIn struct {
 	refreshTTL  time.Duration
 	maxFailures int
 	lock        time.Duration
+	audit       *AuditLog
 }
 
 type LoginResult struct {
@@ -34,7 +36,7 @@ type LoginResult struct {
 	User         entity.User
 }
 
-func NewLogIn(users repository.UserRepository, sessions repository.SessionRepository, secret []byte, issuer, audience string, accessTTL, refreshTTL time.Duration, maxFailures int, lock time.Duration) *LogIn {
+func NewLogIn(users port.UserRepository, sessions port.SessionRepository, secret []byte, issuer, audience string, accessTTL, refreshTTL time.Duration, maxFailures int, lock time.Duration, audit *AuditLog) *LogIn {
 	return &LogIn{
 		users:       users,
 		sessions:    sessions,
@@ -45,27 +47,28 @@ func NewLogIn(users repository.UserRepository, sessions repository.SessionReposi
 		refreshTTL:  refreshTTL,
 		maxFailures: maxFailures,
 		lock:        lock,
+		audit:       audit,
 	}
 }
 
-//メールアドレスとパスワードを確かめ、ログインする
+// メールアドレスとパスワードを確かめ、ログインする
 func (l *LogIn) Execute(ctx context.Context, email, password string) (LoginResult, error) {
 	now := time.Now()
 	user, err := l.users.FindByEmail(ctx, normalizeEmail(email))
-	if errors.Is(err, entity.ErrUserNotFound) {
-		return LoginResult{}, entity.ErrLoginFailed
+	if errors.Is(err, rule.ErrUserNotFound) {
+		return LoginResult{}, rule.ErrLoginFailed
 	}
 	if err != nil {
 		return LoginResult{}, err
 	}
-	if user.Locked(now) {
-		return LoginResult{}, entity.ErrLoginLocked
+	if rule.Locked(user, now) {
+		return LoginResult{}, rule.ErrLoginLocked
 	}
 	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)) != nil {
 		return LoginResult{}, l.recordFailure(ctx, user, now)
 	}
 	if user.Status != entity.StatusActive {
-		return LoginResult{}, entity.ErrLoginFailed
+		return LoginResult{}, rule.ErrLoginFailed
 	}
 	user.FailedLoginCount = 0
 	user.LockedUntil = time.Time{}
@@ -93,6 +96,7 @@ func (l *LogIn) Execute(ctx context.Context, email, password string) (LoginResul
 	}); err != nil {
 		return LoginResult{}, err
 	}
+	l.audit.Record(ctx, user.ID, entity.AuditLogin, "user", user.ID, "ログインしました")
 	return LoginResult{
 		AccessToken:  accessToken,
 		ExpiresAt:    expiresAt,
@@ -110,12 +114,13 @@ func (l *LogIn) recordFailure(ctx context.Context, user entity.User, now time.Ti
 		if err := l.users.UpdateLoginState(ctx, user); err != nil {
 			return err
 		}
-		return entity.ErrLoginLocked
+		l.audit.Record(ctx, user.ID, entity.AuditLoginLocked, "user", user.ID, "ログインの失敗が続いたため、ログインを止めました")
+		return rule.ErrLoginLocked
 	}
 	if err := l.users.UpdateLoginState(ctx, user); err != nil {
 		return err
 	}
-	return entity.ErrLoginFailed
+	return rule.ErrLoginFailed
 }
 
 func normalizeEmail(email string) string {

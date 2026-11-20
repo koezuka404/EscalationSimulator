@@ -6,47 +6,53 @@ import (
 	"time"
 
 	"escalator/entity"
-	"escalator/repository"
+	"escalator/port"
+	"escalator/rule"
 )
 
 type ReturnTicketToQueue struct {
-	tickets   repository.TicketRepository
-	customers repository.CustomerRepository
-	queue     repository.TicketQueue
+	tickets   port.TicketRepository
+	customers port.CustomerRepository
+	queue     port.TicketQueue
 	current   *CurrentUser
 	notices   Notifier
+	audit     *AuditLog
 }
 
-func NewReturnTicketToQueue(tickets repository.TicketRepository, customers repository.CustomerRepository, queue repository.TicketQueue, current *CurrentUser, notices Notifier) *ReturnTicketToQueue {
-	return &ReturnTicketToQueue{tickets: tickets, customers: customers, queue: queue, current: current, notices: notices}
+func NewReturnTicketToQueue(tickets port.TicketRepository, customers port.CustomerRepository, queue port.TicketQueue, current *CurrentUser, notices Notifier, audit *AuditLog) *ReturnTicketToQueue {
+	return &ReturnTicketToQueue{tickets: tickets, customers: customers, queue: queue, current: current, notices: notices, audit: audit}
 }
 
-//管理者が担当を外し、対応中のチケットを待ちに戻す
+// 管理者が担当を外し、対応中のチケットを待ちに戻す
 func (r *ReturnTicketToQueue) Execute(ctx context.Context, authorization, ticketID string) (entity.Ticket, error) {
 	actor, err := r.current.Execute(ctx, authorization)
 	if err != nil {
 		return entity.Ticket{}, err
 	}
 	if actor.Role != entity.RoleAdmin {
-		return entity.Ticket{}, entity.ErrReleaseForbidden
+		return entity.Ticket{}, rule.ErrReleaseForbidden
 	}
 	ticket, err := r.tickets.FindByID(ctx, ticketID)
 	if err != nil {
 		return entity.Ticket{}, err
 	}
 	if ticket.Status != entity.TicketInProgress {
-		return entity.Ticket{}, entity.ErrNotInProgress
+		return entity.Ticket{}, rule.ErrNotInProgress
 	}
 	customer, err := r.customers.FindByID(ctx, ticket.CustomerID)
 	if err != nil {
 		return entity.Ticket{}, err
 	}
-	planScore, err := customer.PlanScore()
+	planScore, err := rule.PlanScore(customer)
 	if err != nil {
 		return entity.Ticket{}, err
 	}
 	now := time.Now()
-	released, err := r.tickets.Release(ctx, ticket.ID, planScore, customer.SLAMinutes, now)
+	score, err := rule.PriorityScore(ticket.Severity, planScore, ticket.CreatedAt, now, customer.SLAMinutes, false)
+	if err != nil {
+		return entity.Ticket{}, err
+	}
+	released, err := r.tickets.Release(ctx, ticket.ID, score, now)
 	if err != nil {
 		return entity.Ticket{}, err
 	}
@@ -59,5 +65,6 @@ func (r *ReturnTicketToQueue) Execute(ctx context.Context, authorization, ticket
 		"type":   "ticket_returned",
 		"ticket": ticketView(released, customer.Name, string(customer.Plan)),
 	})
+	r.audit.Record(ctx, actor.ID, entity.AuditTicketReleased, "ticket", released.ID, "担当を外して待ちに戻しました")
 	return released, nil
 }

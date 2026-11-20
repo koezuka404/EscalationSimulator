@@ -6,65 +6,72 @@ import (
 	"time"
 
 	"escalator/entity"
-	"escalator/repository"
+	"escalator/port"
+	"escalator/rule"
 )
 
 type DeleteUser struct {
-	users     repository.UserRepository
-	customers repository.CustomerRepository
-	statuses  repository.AgentStatusRepository
-	queue     repository.TicketQueue
+	users     port.UserRepository
+	customers port.CustomerRepository
+	statuses  port.AgentStatusRepository
+	queue     port.TicketQueue
 	current   *CurrentUser
 	notices   Notifier
+	audit     *AuditLog
 }
 
-func NewDeleteUser(users repository.UserRepository, customers repository.CustomerRepository, statuses repository.AgentStatusRepository, queue repository.TicketQueue, current *CurrentUser, notices Notifier) *DeleteUser {
-	return &DeleteUser{users: users, customers: customers, statuses: statuses, queue: queue, current: current, notices: notices}
+func NewDeleteUser(users port.UserRepository, customers port.CustomerRepository, statuses port.AgentStatusRepository, queue port.TicketQueue, current *CurrentUser, notices Notifier, audit *AuditLog) *DeleteUser {
+	return &DeleteUser{users: users, customers: customers, statuses: statuses, queue: queue, current: current, notices: notices, audit: audit}
 }
 
-//管理者だけが停止中の利用者を削除する
+// 管理者だけが停止中の利用者を削除する
 func (d *DeleteUser) Execute(ctx context.Context, authorization, userID string) (entity.User, error) {
 	actor, err := d.current.Execute(ctx, authorization)
 	if err != nil {
 		return entity.User{}, err
 	}
 	if actor.Role != entity.RoleAdmin {
-		return entity.User{}, entity.ErrForbidden
+		return entity.User{}, rule.ErrForbidden
 	}
 	user, err := d.users.FindByID(ctx, userID)
 	if err != nil {
 		return entity.User{}, err
 	}
-	deleted, err := user.Delete()
+	deleted, err := rule.Delete(user)
 	if err != nil {
 		return entity.User{}, err
 	}
+	var released []entity.Ticket
 	if user.Role == entity.RoleAgent {
-		if err := d.returnOpenWork(ctx, user); err != nil {
+		released, err = d.returnOpenWork(ctx, user)
+		if err != nil {
 			return entity.User{}, err
 		}
 	}
 	if err := d.users.MarkDeleted(ctx, deleted); err != nil {
 		return entity.User{}, err
 	}
+	for _, ticket := range released {
+		d.audit.Record(ctx, actor.ID, entity.AuditTicketReleased, "ticket", ticket.ID, "利用者を削除するため、担当を外して待ちに戻しました")
+	}
 	return deleted, nil
 }
 
-func (d *DeleteUser) returnOpenWork(ctx context.Context, user entity.User) error {
+func (d *DeleteUser) returnOpenWork(ctx context.Context, user entity.User) ([]entity.Ticket, error) {
 	now := time.Now()
 	released, err := d.statuses.GoOffline(ctx, user.ID, now, func(ticket entity.Ticket) (int, error) {
 		customer, err := d.customers.FindByID(ctx, ticket.CustomerID)
 		if err != nil {
 			return 0, err
 		}
-		planScore, err := customer.PlanScore()
+		planScore, err := rule.PlanScore(customer)
 		if err != nil {
 			return 0, err
 		}
-		return entity.PriorityScore(ticket.Severity, planScore, ticket.CreatedAt, now, customer.SLAMinutes, false)
+		return rule.PriorityScore(ticket.Severity, planScore, ticket.CreatedAt, now, customer.SLAMinutes, false)
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	for _, ticket := range released {
 		enqueueCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
@@ -75,7 +82,7 @@ func (d *DeleteUser) returnOpenWork(ctx context.Context, user entity.User) error
 		}
 		d.notifyReturned(ctx, ticket)
 	}
-	return nil
+	return released, nil
 }
 
 func (d *DeleteUser) notifyReturned(ctx context.Context, ticket entity.Ticket) {

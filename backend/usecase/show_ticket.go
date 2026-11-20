@@ -6,7 +6,8 @@ import (
 	"time"
 
 	"escalator/entity"
-	"escalator/repository"
+	"escalator/port"
+	"escalator/rule"
 )
 
 type SeverityChange struct {
@@ -34,17 +35,17 @@ type TicketDetail struct {
 }
 
 type ShowTicket struct {
-	tickets   repository.TicketRepository
-	customers repository.CustomerRepository
-	users     repository.UserRepository
+	tickets   port.TicketRepository
+	customers port.CustomerRepository
+	users     port.UserRepository
 	current   *CurrentUser
 }
 
-func NewShowTicket(tickets repository.TicketRepository, customers repository.CustomerRepository, users repository.UserRepository, current *CurrentUser) *ShowTicket {
+func NewShowTicket(tickets port.TicketRepository, customers port.CustomerRepository, users port.UserRepository, current *CurrentUser) *ShowTicket {
 	return &ShowTicket{tickets: tickets, customers: customers, users: users, current: current}
 }
 
-//見られる人に、チケットの詳細、対応メモ、緊急度の変更履歴を返す
+// 見られる人に、チケットの詳細、対応メモ、緊急度の変更履歴を返す
 func (s *ShowTicket) Execute(ctx context.Context, authorization, ticketID string) (TicketDetail, error) {
 	actor, err := s.current.Execute(ctx, authorization)
 	if err != nil {
@@ -54,11 +55,11 @@ func (s *ShowTicket) Execute(ctx context.Context, authorization, ticketID string
 	if err != nil {
 		return TicketDetail{}, err
 	}
-	if err := entity.CanViewTicket(actor.Role, actor.ID, ticket); err != nil {
+	if err := rule.CanViewTicket(actor.Role, actor.ID, ticket); err != nil {
 		return TicketDetail{}, err
 	}
 	customer, err := s.customers.FindByID(ctx, ticket.CustomerID)
-	if err != nil && !errors.Is(err, entity.ErrCustomerNotFound) {
+	if err != nil && !errors.Is(err, rule.ErrCustomerNotFound) {
 		return TicketDetail{}, err
 	}
 	changes, err := s.tickets.ListSeverityChanges(ctx, ticket.ID)
