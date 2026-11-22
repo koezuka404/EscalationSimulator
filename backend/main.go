@@ -25,7 +25,7 @@ import (
 	"escalator/websocket"
 )
 
-// 設定を読み、データベースと待ち順につないでサーバーを起動する
+//設定を読み、データベースと待ち順につないでサーバーを起動する
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
@@ -92,7 +92,7 @@ func main() {
 	tickets := repository.NewTicketRepository(conn)
 	statuses := repository.NewAgentStatusRepository(conn)
 	dashboard := usecase.NewShowDashboard(tickets, customers, statuses, current)
-	notices := websocket.NewHub(current, usecase.NewQueueSnapshot(tickets, customers, users, statuses), dashboard, cfg.CORSAllowedOrigin)
+	notices := websocket.NewHub(current, usecase.NewQueueSnapshot(tickets, customers, users, statuses), dashboard, usecase.NewConnectionLog(repository.NewConnectionLogRepository(conn)), cfg.CORSAllowedOrigin)
 	shared := websocket.NewRemoteNotices(notices, redis.NewBus(order), cfg.RedisPubSubChannelPrefix)
 	dashboard.SetNotifier(shared)
 	go notices.Run()
@@ -141,7 +141,7 @@ func main() {
 
 	router.Auth(e, controller.NewAuthAPI(
 		usecase.NewSignUp(users, cfg.BcryptCost),
-		usecase.NewLogIn(users, sessions, []byte(cfg.JWTSecret), cfg.JWTIssuer, cfg.JWTAudience, cfg.AccessTokenTTL, cfg.RefreshTokenTTL, cfg.LoginMaxFailures, cfg.LoginLock, audit),
+		usecase.NewLogIn(users, repository.NewLoginAttemptRepository(conn), sessions, []byte(cfg.JWTSecret), cfg.JWTIssuer, cfg.JWTAudience, cfg.AccessTokenTTL, cfg.RefreshTokenTTL, cfg.LoginMaxFailures, cfg.LoginLock, audit),
 		usecase.NewLogOut(sessions, audit),
 		usecase.NewRefresh(users, sessions, []byte(cfg.JWTSecret), cfg.JWTIssuer, cfg.JWTAudience, cfg.AccessTokenTTL, cfg.RefreshTokenTTL, notices, audit),
 		cfg.RefreshTokenCookieName,

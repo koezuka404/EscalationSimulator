@@ -10,20 +10,29 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/labstack/echo/v4"
 
 	"escalator/entity"
 	"escalator/rule"
+	"escalator/scope"
 	"escalator/usecase"
 )
 
 type client struct {
-	hub    *Hub
-	conn   *websocket.Conn
-	send   chan []byte
-	userID string
-	role   entity.Role
+	hub       *Hub
+	conn      *websocket.Conn
+	send      chan []byte
+	id        string
+	userID    string
+	role      entity.Role
+	ip        string
+	cutReason string
+}
+
+type ConnectionRecord interface {
+	Save(ctx context.Context, userID, connectionID, eventType, reason, ip string)
 }
 
 type closeUserRequest struct {
@@ -37,30 +46,32 @@ type outbound struct {
 }
 
 type Hub struct {
-	clients    map[*client]struct{}
-	register   chan *client
-	unregister chan *client
-	broadcast  chan outbound
-	closeUser  chan closeUserRequest
-	current    *usecase.CurrentUser
-	snapshot   *usecase.QueueSnapshot
-	dashboard  *usecase.ShowDashboard
-	upgrader   websocket.Upgrader
-	mu         sync.Mutex
-	goneSince  map[string]time.Time
+	clients     map[*client]struct{}
+	register    chan *client
+	unregister  chan *client
+	broadcast   chan outbound
+	closeUser   chan closeUserRequest
+	current     *usecase.CurrentUser
+	snapshot    *usecase.QueueSnapshot
+	dashboard   *usecase.ShowDashboard
+	connections ConnectionRecord
+	upgrader    websocket.Upgrader
+	mu          sync.Mutex
+	goneSince   map[string]time.Time
 }
 
-func NewHub(current *usecase.CurrentUser, snapshot *usecase.QueueSnapshot, dashboard *usecase.ShowDashboard, origin string) *Hub {
+func NewHub(current *usecase.CurrentUser, snapshot *usecase.QueueSnapshot, dashboard *usecase.ShowDashboard, connections ConnectionRecord, origin string) *Hub {
 	hub := &Hub{
-		clients:    make(map[*client]struct{}),
-		register:   make(chan *client),
-		unregister: make(chan *client),
-		broadcast:  make(chan outbound, 32),
-		closeUser:  make(chan closeUserRequest),
-		current:    current,
-		snapshot:   snapshot,
-		dashboard:  dashboard,
-		goneSince:  make(map[string]time.Time),
+		clients:     make(map[*client]struct{}),
+		register:    make(chan *client),
+		unregister:  make(chan *client),
+		broadcast:   make(chan outbound, 32),
+		closeUser:   make(chan closeUserRequest),
+		current:     current,
+		snapshot:    snapshot,
+		dashboard:   dashboard,
+		connections: connections,
+		goneSince:   make(map[string]time.Time),
 	}
 	hub.upgrader = websocket.Upgrader{
 		ReadBufferSize:  1024,
@@ -76,7 +87,7 @@ func NewHub(current *usecase.CurrentUser, snapshot *usecase.QueueSnapshot, dashb
 	return hub
 }
 
-// つながっている画面へ知らせを配る
+//つながっている画面へ知らせを配る
 func (h *Hub) Run() {
 	for {
 		select {
@@ -85,6 +96,7 @@ func (h *Hub) Run() {
 			if client.role == entity.RoleAgent {
 				h.ForgetGone(client.userID)
 			}
+			h.record(client, entity.ConnectionOpened, "画面につながりました")
 		case client := <-h.unregister:
 			h.removeClient(client)
 		case item := <-h.broadcast:
@@ -98,6 +110,7 @@ func (h *Hub) Run() {
 				select {
 				case client.send <- item.message.Body:
 				default:
+					client.cutReason = "画面への知らせを届けられなかったため、接続を切りました"
 					h.removeClient(client)
 					log.Printf("画面への知らせを届けられなかったため、接続を切りました。user_id=%s", client.userID)
 				}
@@ -109,7 +122,7 @@ func (h *Hub) Run() {
 	}
 }
 
-// 指定した利用者の画面の接続を切る
+//指定した利用者の画面の接続を切る
 func (h *Hub) CloseUser(userID string) {
 	if userID == "" {
 		return
@@ -124,11 +137,12 @@ func (h *Hub) dropUser(userID string) {
 		if client.userID != userID {
 			continue
 		}
+		client.cutReason = "画面の接続を切りました"
 		h.removeClient(client)
 	}
 }
 
-// 保存が済んだあとの知らせを、つながっている画面へ届ける
+//保存が済んだあとの知らせを、つながっている画面へ届ける
 func (h *Hub) Send(message usecase.Message) {
 	h.enqueue(outbound{message: message})
 }
@@ -151,10 +165,29 @@ func (h *Hub) removeClient(client *client) {
 	}
 	delete(h.clients, client)
 	close(client.send)
+	eventType := entity.ConnectionClosed
+	reason := "画面の接続が切れました"
+	if client.cutReason != "" {
+		eventType = entity.ConnectionForcedOff
+		reason = client.cutReason
+	}
+	h.record(client, eventType, reason)
 	if client.role != entity.RoleAgent || h.agentConnected(client.userID) {
 		return
 	}
 	h.markGone(client.userID)
+}
+
+func (h *Hub) record(client *client, eventType, reason string) {
+	if h.connections == nil || client == nil {
+		return
+	}
+	userID, connectionID, ip := client.userID, client.id, client.ip
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		h.connections.Save(ctx, userID, connectionID, eventType, reason, ip)
+	}()
 }
 
 func (h *Hub) agentConnected(userID string) bool {
@@ -175,7 +208,7 @@ func (h *Hub) markGone(userID string) {
 	h.goneSince[userID] = time.Now()
 }
 
-// 接続が切れたまま、指定時刻まで戻っていない担当者を返す
+//接続が切れたまま、指定時刻まで戻っていない担当者を返す
 func (h *Hub) AgentsGoneSince(before time.Time) []string {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -188,7 +221,7 @@ func (h *Hub) AgentsGoneSince(before time.Time) []string {
 	return ids
 }
 
-// 担当者の接続が、まだすべて切れたままかを返す
+//担当者の接続が、まだすべて切れたままかを返す
 func (h *Hub) StillGone(userID string) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -196,7 +229,7 @@ func (h *Hub) StillGone(userID string) bool {
 	return ok
 }
 
-// 担当者が戻った、または離席にしたあと、切れた記録を消す
+//担当者が戻った、または離席にしたあと、切れた記録を消す
 func (h *Hub) ForgetGone(userID string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -216,7 +249,7 @@ func (c *client) wants(message usecase.Message) bool {
 	return message.ApplicantID != "" && c.role == entity.RoleApplicant && c.userID == message.ApplicantID
 }
 
-// ログインを確かめて接続し、担当者と管理者には今の待ち順と稼働を送る
+//ログインを確かめて接続し、担当者と管理者には今の待ち順と稼働を送る
 func (h *Hub) Serve(c echo.Context) error {
 	token := accessToken(c)
 	if token == "" {
@@ -237,8 +270,10 @@ func (h *Hub) Serve(c echo.Context) error {
 		hub:    h,
 		conn:   conn,
 		send:   make(chan []byte, 16),
+		id:     uuid.NewString(),
 		userID: actor.ID,
 		role:   actor.Role,
+		ip:     scope.ClientIP(c.Request().Context()),
 	}
 	if actor.Role == entity.RoleAgent || actor.Role == entity.RoleAdmin {
 		if err := h.writeSnapshot(c.Request().Context(), conn); err != nil {

@@ -37,5 +37,11 @@ func Migrate(db *gorm.DB) error {
 	if err := MigrateRequestLogs(db); err != nil {
 		return fmt.Errorf("受け付けた操作の記録用のテーブルを作成できませんでした: %w", err)
 	}
+	if err := MigrateConnectionLogs(db); err != nil {
+		return fmt.Errorf("常時接続の記録用のテーブルを作成できませんでした: %w", err)
+	}
+	if err := MigrateLoginAttempts(db); err != nil {
+		return fmt.Errorf("ログイン失敗の記録用のテーブルを作成できませんでした: %w", err)
+	}
 	return nil
 }

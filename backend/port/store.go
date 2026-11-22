@@ -99,3 +99,12 @@ type AuditRepository interface {
 type RequestLogRepository interface {
 	Save(ctx context.Context, entry entity.RequestLogEntry) error
 }
+
+type ConnectionLogRepository interface {
+	Save(ctx context.Context, entry entity.ConnectionLogEntry) error
+}
+
+type LoginAttemptRepository interface {
+	Find(ctx context.Context, email, ip string) (entity.LoginAttempt, error)
+	Save(ctx context.Context, attempt entity.LoginAttempt) error
+}
