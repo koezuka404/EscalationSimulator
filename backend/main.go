@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
+	"syscall"
 	"time"
 
 	"escalator/config"
@@ -24,54 +26,48 @@ import (
 )
 
 func main() {
-	cfg, err := config.Load()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "設定を読み込めませんでした: %v\n", err)
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "アプリケーションを終了します: %v\n", err)
 		os.Exit(1)
 	}
+}
 
-	conn, err := db.Open(cfg.DatabaseURL)
+func run() error {
+	cfg, err := config.Load()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "データベースに接続できませんでした: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("設定を読み込めませんでした: %w", err)
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	passwords := crypto.NewBcrypt(cfg.BcryptCost)
+	conn, err := repository.Connect(cfg.DatabaseURL)
+	if err != nil {
+		return err
 	}
 	sqlDB, err := conn.DB()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "データベースに接続できませんでした: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("データベースに接続できませんでした: %w", err)
 	}
 	defer sqlDB.Close()
 
-	if err := repository.Migrate(conn); err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
-		os.Exit(1)
-	}
-
 	order, err := redis.Open(cfg.RedisURL)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "待ち順の保存先に接続できませんでした: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("待ち順の保存先に接続できませんでした: %w", err)
 	}
 	defer order.Close()
 
 	users := repository.NewUserRepository(conn)
 	sessions := repository.NewSessionRepository(conn)
 	customers := repository.NewCustomerRepository(conn)
+	if cfg.SeedSampleData {
+		if err := seed.Run(ctx, customers, users, cfg.SampleUserPassword, passwords); err != nil {
+			return err
+		}
+	}
 	tickets := repository.NewTicketRepository(conn)
 	statuses := repository.NewAgentStatusRepository(conn)
-	passwords := crypto.NewBcrypt(cfg.BcryptCost)
-	if err := seed.SeedCustomersIfEmpty(context.Background(), customers); err != nil {
-		fmt.Fprintf(os.Stderr, "サンプルの顧客を登録できませんでした: %v\n", err)
-		os.Exit(1)
-	}
-	if err := seed.SeedUsersIfEmpty(context.Background(), users, customers, cfg.SampleUserPassword, passwords); err != nil {
-		fmt.Fprintf(os.Stderr, "サンプルの利用者を登録できませんでした: %v\n", err)
-		os.Exit(1)
-	}
-
-	jobCtx, stopJob := context.WithCancel(context.Background())
-	defer stopJob()
-
 	access := crypto.NewAccessTokens([]byte(cfg.JWTSecret), cfg.JWTIssuer, cfg.JWTAudience, cfg.AccessTokenTTL)
 	secrets := crypto.Secrets{}
 	policy := usecase.SessionPolicy{RefreshTTL: cfg.RefreshTokenTTL, MaxFailures: cfg.LoginMaxFailures, Lock: cfg.LoginLock}
@@ -86,14 +82,9 @@ func main() {
 	demo := usecase.NewRunDemo(users, customers, repository.NewDemoRepository(conn), createTicket, shared, audit)
 	scores := usecase.NewRecalcOpenScores(tickets, customers, order, shared)
 
-	if err := job.RecoverDemo(context.Background(), demo); err != nil {
-		fmt.Fprintf(os.Stderr, "前回のデモを止めた状態にできませんでした: %v\n", err)
-		os.Exit(1)
-	}
-
 	e := router.New(router.Server{
 		Origin:       cfg.CORSAllowedOrigin,
-		Process:      jobCtx,
+		Process:      ctx,
 		Tokens:       access,
 		Records:      usecase.NewRequestLog(repository.NewRequestLogRepository(conn)),
 		Limiter:      limits,
@@ -101,7 +92,7 @@ func main() {
 		CSRFCookie:   cfg.CSRFTokenCookieName,
 	}, router.APIs{
 		Health:       controller.NewHealthAPI(usecase.NewCheckHealth(db.NewProbe(conn), order)),
-		Auth:         controller.NewAuthAPI(usecase.NewSignUp(users, passwords), usecase.NewLogIn(users, repository.NewLoginAttemptRepository(conn), sessions, passwords, access, secrets, policy, audit), usecase.NewLogOut(sessions, secrets, audit), usecase.NewRefresh(users, sessions, access, secrets, policy, notices, audit), cfg.RefreshTokenCookieName, cfg.CSRFTokenCookieName, cfg.CookieSecure, int(cfg.RefreshTokenTTL.Seconds())),
+		Auth:         controller.NewAuthAPI(usecase.NewSignUp(users, passwords), usecase.NewLogIn(users, repository.NewLoginAttemptRepository(conn), sessions, passwords, access, secrets, policy, audit), usecase.NewLogOut(sessions, secrets, audit), usecase.NewRefresh(users, sessions, access, secrets, policy, notices, audit), cfg.RefreshTokenCookieName, cfg.CSRFTokenCookieName, cfg.CookieSecure, cfg.RefreshTokenMaxAge()),
 		Customers:    controller.NewCustomerAPI(usecase.NewCustomers(customers, current, audit)),
 		Me:           controller.NewMeAPI(current),
 		Users:        controller.NewUserAPI(usecase.NewLinkApplicant(users, customers, current, audit), usecase.NewCreateAgent(users, current, passwords), usecase.NewListUsers(users, current), usecase.NewSuspendUser(users, current, notices, audit), usecase.NewResumeUser(users, current), usecase.NewDeleteUser(users, customers, statuses, order, current, shared, audit), usecase.NewChangeRole(users, customers, statuses, order, current, shared, audit)),
@@ -114,27 +105,44 @@ func main() {
 		Notices:      notices,
 	})
 
-	go websocket.Serve(jobCtx, notices, shared)
-	go job.NewRecalcPriority(scores, dashboard, shared, order, cfg.PriorityRecalc).Run(jobCtx)
-	go job.NewReleaseDisconnectedAgent(usecase.NewReleaseDisconnectedAgents(users, customers, statuses, order, notices, shared, cfg.AgentDisconnectGrace, audit), cfg.PriorityRecalc).Run(jobCtx)
-
+	waitJobs, err := job.Start(ctx, demo, job.NewRecalcPriority(scores, dashboard, shared, order, cfg.PriorityRecalc), job.NewReleaseDisconnectedAgent(usecase.NewReleaseDisconnectedAgents(users, customers, statuses, order, notices, shared, cfg.AgentDisconnectGrace, audit), cfg.PriorityRecalc))
+	if err != nil {
+		return err
+	}
+	var sockets sync.WaitGroup
+	sockets.Add(1)
 	go func() {
-		if err := e.Start(fmt.Sprintf(":%d", cfg.HTTPPort)); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			fmt.Fprintf(os.Stderr, "サーバーを起動できませんでした: %v\n", err)
-			os.Exit(1)
+		defer sockets.Done()
+		websocket.Serve(ctx, notices, shared)
+	}()
+	waitBackground := func() {
+		waitJobs()
+		sockets.Wait()
+	}
+
+	serverErr := make(chan error, 1)
+	go func() {
+		err := e.Start(fmt.Sprintf(":%d", cfg.HTTPPort))
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serverErr <- fmt.Errorf("サーバーを起動できませんでした: %w", err)
 		}
 	}()
 
 	fmt.Printf("環境を起動しました env=%s port=%d\n", cfg.Environment, cfg.HTTPPort)
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt)
-	<-stop
-	stopJob()
+	select {
+	case err := <-serverErr:
+		stop()
+		waitBackground()
+		return err
+	case <-ctx.Done():
+	}
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := e.Shutdown(shutdownCtx); err != nil {
-		fmt.Fprintf(os.Stderr, "サーバーを停止できませんでした: %v\n", err)
-		os.Exit(1)
+	err = e.Shutdown(shutdownCtx)
+	waitBackground()
+	if err != nil {
+		return fmt.Errorf("サーバーを停止できませんでした: %w", err)
 	}
+	return nil
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"escalator/httpx"
 	"escalator/port"
 )
 
@@ -44,7 +45,7 @@ func AccessLog(tokens port.TokenVerifier, records RequestRecorder) echo.Middlewa
 }
 
 func accessUserID(c echo.Context, tokens port.TokenVerifier) string {
-	raw := BearerToken(c.Request().Header.Get("Authorization"))
+	raw := httpx.BearerToken(c.Request().Header.Get("Authorization"))
 	if raw == "" || tokens == nil {
 		return ""
 	}

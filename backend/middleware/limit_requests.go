@@ -12,6 +12,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"escalator/entity"
+	"escalator/httpx"
 	"escalator/port"
 )
 
@@ -115,7 +116,7 @@ func (l *Limiter) StartDemo(next echo.HandlerFunc) echo.HandlerFunc {
 
 func (l *Limiter) forUser(c echo.Context, next echo.HandlerFunc, name, details string, capacity int, perSecond float64) error {
 	header := c.Request().Header.Get("Authorization")
-	raw := BearerToken(header)
+	raw := httpx.BearerToken(header)
 	if raw == "" {
 		return next(c)
 	}
@@ -161,15 +162,6 @@ func cookieValue(c echo.Context, name string) string {
 		return ""
 	}
 	return cookie.Value
-}
-
-func BearerToken(authorization string) string {
-	const prefix = "Bearer "
-	value := strings.TrimSpace(authorization)
-	if len(value) < len(prefix) || !strings.EqualFold(value[:len(prefix)], prefix) {
-		return ""
-	}
-	return strings.TrimSpace(value[len(prefix):])
 }
 
 //プロキシが足した接続元を返す

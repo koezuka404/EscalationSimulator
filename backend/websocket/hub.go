@@ -15,6 +15,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"escalator/entity"
+	"escalator/httpx"
 	"escalator/rule"
 	"escalator/scope"
 	"escalator/usecase"
@@ -70,6 +71,10 @@ type Hub struct {
 	upgrader    websocket.Upgrader
 	mu          sync.Mutex
 	goneSince   map[string]time.Time
+	stop        chan struct{}
+	stopped     chan struct{}
+	stopOnce    sync.Once
+	saving      sync.WaitGroup
 }
 
 func NewHub(current actorLookup, snapshot queuePicture, dashboard dashboardNumbers, connections ConnectionRecord, origin string) *Hub {
@@ -84,6 +89,8 @@ func NewHub(current actorLookup, snapshot queuePicture, dashboard dashboardNumbe
 		dashboard:   dashboard,
 		connections: connections,
 		goneSince:   make(map[string]time.Time),
+		stop:        make(chan struct{}),
+		stopped:     make(chan struct{}),
 	}
 	hub.upgrader = websocket.Upgrader{
 		ReadBufferSize:  1024,
@@ -101,8 +108,12 @@ func NewHub(current actorLookup, snapshot queuePicture, dashboard dashboardNumbe
 
 //つながっている画面へ知らせを配る
 func (h *Hub) Run() {
+	defer close(h.stopped)
 	for {
 		select {
+		case <-h.stop:
+			h.dropAll()
+			return
 		case client := <-h.register:
 			h.clients[client] = struct{}{}
 			if client.role == entity.RoleAgent {
@@ -134,14 +145,34 @@ func (h *Hub) Run() {
 	}
 }
 
+//つながっている画面を切り、配信を止める
+func (h *Hub) Close() {
+	h.stopOnce.Do(func() { close(h.stop) })
+	<-h.stopped
+	h.saving.Wait()
+}
+
 //指定した利用者の画面の接続を切る
 func (h *Hub) CloseUser(userID string) {
 	if userID == "" {
 		return
 	}
 	done := make(chan struct{})
-	h.closeUser <- closeUserRequest{userID: userID, done: done}
-	<-done
+	select {
+	case h.closeUser <- closeUserRequest{userID: userID, done: done}:
+		select {
+		case <-done:
+		case <-h.stopped:
+		}
+	case <-h.stopped:
+	}
+}
+
+func (h *Hub) dropAll() {
+	for client := range h.clients {
+		client.cutReason = "画面の接続を切りました"
+		h.removeClient(client)
+	}
 }
 
 func (h *Hub) dropUser(userID string) {
@@ -195,7 +226,9 @@ func (h *Hub) record(client *client, eventType, reason string) {
 		return
 	}
 	userID, connectionID, ip := client.userID, client.id, client.ip
+	h.saving.Add(1)
 	go func() {
+		defer h.saving.Done()
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 		h.connections.Save(ctx, userID, connectionID, eventType, reason, ip)
@@ -301,7 +334,12 @@ func (h *Hub) Serve(c echo.Context) error {
 			return nil
 		}
 	}
-	h.register <- person
+	select {
+	case h.register <- person:
+	case <-h.stopped:
+		conn.Close()
+		return nil
+	}
 	go person.write()
 	person.read()
 	return nil
@@ -311,12 +349,7 @@ func accessToken(c echo.Context) string {
 	if token := strings.TrimSpace(c.QueryParam("token")); token != "" {
 		return token
 	}
-	const prefix = "Bearer "
-	header := c.Request().Header.Get("Authorization")
-	if strings.HasPrefix(header, prefix) {
-		return strings.TrimSpace(header[len(prefix):])
-	}
-	return ""
+	return httpx.BearerToken(c.Request().Header.Get("Authorization"))
 }
 
 func (h *Hub) writeSnapshot(ctx context.Context, conn *websocket.Conn) error {
@@ -373,7 +406,10 @@ func (h *Hub) writeDashboard(ctx context.Context, conn *websocket.Conn) error {
 
 func (c *client) read() {
 	defer func() {
-		c.hub.unregister <- c
+		select {
+		case c.hub.unregister <- c:
+		case <-c.hub.stopped:
+		}
 		c.conn.Close()
 	}()
 	c.conn.SetReadLimit(512)

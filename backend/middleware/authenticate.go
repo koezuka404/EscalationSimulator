@@ -7,6 +7,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"escalator/entity"
+	"escalator/httpx"
 	"escalator/rule"
 )
 
@@ -14,7 +15,7 @@ import (
 func RequireLogin(lookup func(context.Context, string) (entity.User, error)) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			if _, err := lookup(c.Request().Context(), BearerToken(c.Request().Header.Get("Authorization"))); err != nil {
+			if _, err := lookup(c.Request().Context(), httpx.BearerToken(c.Request().Header.Get("Authorization"))); err != nil {
 				return c.JSON(http.StatusUnauthorized, map[string]string{
 					"message": rule.ErrUnauthenticated.Error(),
 				})

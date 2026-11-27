@@ -42,6 +42,7 @@ type Config struct {
 	CORSAllowedOrigin        string
 	RedisPubSubChannelPrefix string
 	SampleUserPassword       string
+	SeedSampleData           bool
 }
 
 func Load() (*Config, error) {
@@ -79,12 +80,18 @@ func LoadFromEnv(getenv func(string) string) (*Config, error) {
 		CORSAllowedOrigin:        strings.TrimSpace(getenv("CORS_ALLOWED_ORIGIN")),
 		RedisPubSubChannelPrefix: valueOrDefault(getenv("REDIS_PUBSUB_CHANNEL_PREFIX"), "escalator:notify:"),
 		SampleUserPassword:       strings.TrimSpace(getenv("SAMPLE_USER_PASSWORD")),
+		SeedSampleData:           boolValue(getenv("SEED_SAMPLE_DATA"), environment != EnvironmentProduction),
 	}
 
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
 	return cfg, nil
+}
+
+//再ログイン用の印を残す秒数
+func (c Config) RefreshTokenMaxAge() int {
+	return int(c.RefreshTokenTTL.Seconds())
 }
 
 func (c Config) Validate() error {
