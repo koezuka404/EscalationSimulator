@@ -26,7 +26,7 @@ func NewAddWorkNote(tickets port.TicketRepository, current *CurrentUser) *AddWor
 	return &AddWorkNote{tickets: tickets, current: current}
 }
 
-// 対応メモを保存する
+//対応メモを保存する
 func (a *AddWorkNote) Execute(ctx context.Context, authorization, ticketID, body string) (SavedWorkNote, error) {
 	body, err := rule.WorkNoteText(body)
 	if err != nil {

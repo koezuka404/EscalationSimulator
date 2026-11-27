@@ -23,7 +23,7 @@ func NewCreateTicket(tickets port.TicketRepository, customers port.CustomerRepos
 	return &CreateTicket{tickets: tickets, customers: customers, current: current, queue: queue, notices: notices, audit: audit}
 }
 
-// 申請者がチケットを起票し、保存したあと待ち順へ載せる
+//申請者がチケットを起票し、保存したあと待ち順へ載せる
 func (c *CreateTicket) Execute(ctx context.Context, authorization, title, description, category string, severity int) (entity.Ticket, error) {
 	actor, err := c.current.Execute(ctx, authorization)
 	if err != nil {
@@ -42,7 +42,7 @@ func (c *CreateTicket) Execute(ctx context.Context, authorization, title, descri
 	return c.CreateFor(ctx, actor.ID, customer, title, description, severity, entity.Category(category))
 }
 
-// 所属顧客の点数でチケットを保存し、待ち順へ載せて知らせる
+//所属顧客の点数でチケットを保存し、待ち順へ載せて知らせる
 func (c *CreateTicket) CreateFor(ctx context.Context, createdBy string, customer entity.Customer, title, description string, severity int, category entity.Category) (entity.Ticket, error) {
 	planScore, err := rule.PlanScore(customer)
 	if err != nil {

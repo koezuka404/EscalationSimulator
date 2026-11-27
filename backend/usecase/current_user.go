@@ -2,32 +2,27 @@ package usecase
 
 import (
 	"context"
-	"strings"
 
 	"escalator/entity"
 	"escalator/port"
 	"escalator/rule"
-	"escalator/usecase/crypto"
 )
 
 type CurrentUser struct {
-	users    port.UserRepository
-	secret   []byte
-	issuer   string
-	audience string
+	users  port.UserRepository
+	tokens port.TokenVerifier
 }
 
-func NewCurrentUser(users port.UserRepository, secret []byte, issuer, audience string) *CurrentUser {
-	return &CurrentUser{users: users, secret: secret, issuer: issuer, audience: audience}
+func NewCurrentUser(users port.UserRepository, tokens port.TokenVerifier) *CurrentUser {
+	return &CurrentUser{users: users, tokens: tokens}
 }
 
-// ログイン用トークンから、今の利用者を取る
-func (c *CurrentUser) Execute(ctx context.Context, authorization string) (entity.User, error) {
-	raw := bearerToken(authorization)
-	if raw == "" {
+//ログイン用トークンから、今の利用者を取る
+func (c *CurrentUser) Execute(ctx context.Context, token string) (entity.User, error) {
+	if token == "" {
 		return entity.User{}, rule.ErrUnauthenticated
 	}
-	userID, authVersion, err := crypto.ParseAccess(c.secret, c.issuer, c.audience, raw)
+	userID, authVersion, err := c.tokens.Parse(token)
 	if err != nil || userID == "" {
 		return entity.User{}, rule.ErrUnauthenticated
 	}
@@ -36,13 +31,4 @@ func (c *CurrentUser) Execute(ctx context.Context, authorization string) (entity
 		return entity.User{}, rule.ErrUnauthenticated
 	}
 	return user, nil
-}
-
-func bearerToken(authorization string) string {
-	const prefix = "Bearer "
-	value := strings.TrimSpace(authorization)
-	if len(value) < len(prefix) || !strings.EqualFold(value[:len(prefix)], prefix) {
-		return ""
-	}
-	return strings.TrimSpace(value[len(prefix):])
 }

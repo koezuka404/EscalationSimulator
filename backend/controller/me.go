@@ -17,9 +17,9 @@ func NewMeAPI(current currentUserUsecase) *MeAPI {
 	return &MeAPI{current: current}
 }
 
-// 今ログインしている人を返す
+//今ログインしている人を返す
 func (a *MeAPI) Show(c echo.Context) error {
-	user, err := a.current.Execute(c.Request().Context(), c.Request().Header.Get("Authorization"))
+	user, err := a.current.Execute(c.Request().Context(), accessToken(c))
 	if err != nil {
 		if errors.Is(err, rule.ErrUnauthenticated) {
 			return c.JSON(http.StatusUnauthorized, messageJSON{Message: err.Error()})

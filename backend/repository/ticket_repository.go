@@ -83,7 +83,7 @@ func MigrateWorkNotes(db *gorm.DB) error {
 	return db.AutoMigrate(&workNoteRow{})
 }
 
-// チケットを保存する
+//チケットを保存する
 func (r *ticketRepository) Save(ctx context.Context, ticket entity.Ticket) (entity.Ticket, error) {
 	if ticket.ID == "" {
 		ticket.ID = uuid.NewString()
@@ -120,7 +120,7 @@ func (r *ticketRepository) FindByID(ctx context.Context, id string) (entity.Tick
 	return toTicket(row), nil
 }
 
-// 対応中のチケットを完了にし担当者を待機中に戻す
+//対応中のチケットを完了にし担当者を待機中に戻す
 func (r *ticketRepository) Close(ctx context.Context, id, comment string, closedAt time.Time) (entity.Ticket, error) {
 	var closed entity.Ticket
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -163,7 +163,7 @@ func (r *ticketRepository) Close(ctx context.Context, id, comment string, closed
 	return closed, nil
 }
 
-// 対応中を待ちに戻し、担当者を待機中にする
+//対応中を待ちに戻し、担当者を待機中にする
 func (r *ticketRepository) Release(ctx context.Context, id string, score int, now time.Time) (entity.Ticket, error) {
 	var released entity.Ticket
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -219,7 +219,7 @@ func setAgentAvailable(tx *gorm.DB, agentID string) error {
 	return tx.Create(&agentStatusRow{UserID: agentID, Status: string(entity.AgentAvailable)}).Error
 }
 
-// 緊急度と点数を保存し、変更の履歴を残す
+//緊急度と点数を保存し、変更の履歴を残す
 func (r *ticketRepository) UpdateSeverity(ctx context.Context, id string, severity, score int, reason, changedBy string, now time.Time) (entity.Ticket, error) {
 	var updated entity.Ticket
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -272,7 +272,7 @@ func (r *ticketRepository) UpdateSeverity(ctx context.Context, id string, severi
 	return updated, nil
 }
 
-// 対応待ちの点数だけを保存する対応中や完了は変えない
+//対応待ちの点数だけを保存する対応中や完了は変えない
 func (r *ticketRepository) UpdateOpenScore(ctx context.Context, id string, score int, now time.Time) (bool, error) {
 	result := r.db.WithContext(ctx).Model(&ticketRow{}).
 		Where("id = ? AND status = ?", id, string(entity.TicketOpen)).
@@ -286,7 +286,7 @@ func (r *ticketRepository) UpdateOpenScore(ctx context.Context, id string, score
 	return result.RowsAffected > 0, nil
 }
 
-// まだ知らせていない約束時間オーバーに、一度だけ印を付ける
+//まだ知らせていない約束時間オーバーに、一度だけ印を付ける
 func (r *ticketRepository) MarkSLANotified(ctx context.Context, id string, at time.Time) (bool, error) {
 	result := r.db.WithContext(ctx).Model(&ticketRow{}).
 		Where("id = ? AND status = ? AND sla_notified_at IS NULL", id, string(entity.TicketOpen)).
@@ -297,7 +297,7 @@ func (r *ticketRepository) MarkSLANotified(ctx context.Context, id string, at ti
 	return result.RowsAffected > 0, nil
 }
 
-// 申請者が起票したチケットを、更新が新しい順で返す詳細の本文は読まない
+//申請者が起票したチケットを、更新が新しい順で返す詳細の本文は読まない
 func (r *ticketRepository) ListByCreator(ctx context.Context, createdBy string) ([]entity.Ticket, error) {
 	var rows []ticketRow
 	err := r.db.WithContext(ctx).
@@ -316,7 +316,7 @@ func (r *ticketRepository) ListByCreator(ctx context.Context, createdBy string) 
 	return tickets, nil
 }
 
-// 条件に合うチケットを、更新が新しい順で返す詳細の本文は読まない
+//条件に合うチケットを、更新が新しい順で返す詳細の本文は読まない
 func (r *ticketRepository) Search(ctx context.Context, filter port.TicketFilter) ([]entity.Ticket, error) {
 	query := r.db.WithContext(ctx).
 		Select("id", "customer_id", "title", "severity", "status", "assignee_id", "priority_score", "created_at").
@@ -345,7 +345,7 @@ func (r *ticketRepository) Search(ctx context.Context, filter port.TicketFilter)
 	return tickets, nil
 }
 
-// 緊急度の変更履歴を古い順で返す
+//緊急度の変更履歴を古い順で返す
 func (r *ticketRepository) ListSeverityChanges(ctx context.Context, ticketID string) ([]entity.SeverityChange, error) {
 	var rows []severityHistoryRow
 	err := r.db.WithContext(ctx).
@@ -369,7 +369,7 @@ func (r *ticketRepository) ListSeverityChanges(ctx context.Context, ticketID str
 	return changes, nil
 }
 
-// 対応メモを保存する完了したチケットには書かない
+//対応メモを保存する完了したチケットには書かない
 func (r *ticketRepository) AddWorkNote(ctx context.Context, ticketID, userID, body string, createdAt time.Time) (entity.WorkNote, error) {
 	var saved entity.WorkNote
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -413,7 +413,7 @@ func (r *ticketRepository) AddWorkNote(ctx context.Context, ticketID, userID, bo
 	return saved, nil
 }
 
-// 対応メモを書いた順で返す
+//対応メモを書いた順で返す
 func (r *ticketRepository) ListWorkNotes(ctx context.Context, ticketID string) ([]entity.WorkNote, error) {
 	var rows []workNoteRow
 	err := r.db.WithContext(ctx).
@@ -437,7 +437,7 @@ func (r *ticketRepository) ListWorkNotes(ctx context.Context, ticketID string) (
 	return notes, nil
 }
 
-// 対応待ちのチケットを返す詳細の本文は読まない
+//対応待ちのチケットを返す詳細の本文は読まない
 func (r *ticketRepository) ListOpen(ctx context.Context) ([]entity.Ticket, error) {
 	var rows []ticketRow
 	err := r.db.WithContext(ctx).
@@ -454,7 +454,7 @@ func (r *ticketRepository) ListOpen(ctx context.Context) ([]entity.Ticket, error
 	return tickets, nil
 }
 
-// 現場の数字に使うチケットを返す詳細の本文は読まない
+//現場の数字に使うチケットを返す詳細の本文は読まない
 func (r *ticketRepository) ListForDashboard(ctx context.Context, since time.Time) ([]entity.Ticket, error) {
 	var rows []ticketRow
 	err := r.db.WithContext(ctx).

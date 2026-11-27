@@ -29,7 +29,7 @@ func NewChangeAgentStatus(users port.UserRepository, customers port.CustomerRepo
 	return &ChangeAgentStatus{users: users, customers: customers, statuses: statuses, queue: queue, current: current, notices: notices, audit: audit}
 }
 
-// 稼働を待機中か離席に切り替える離席なら対応中を待ちに戻す
+//稼働を待機中か離席に切り替える離席なら対応中を待ちに戻す
 func (c *ChangeAgentStatus) Execute(ctx context.Context, authorization, targetID, rawStatus string) (AgentStatus, error) {
 	next, err := rule.ParseAvailability(rawStatus)
 	if err != nil {

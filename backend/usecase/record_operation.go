@@ -18,7 +18,7 @@ func NewAuditLog(repo port.AuditRepository) *AuditLog {
 	return &AuditLog{repo: repo}
 }
 
-// 操作の記録を残す失敗しても、元の操作は取り消さない
+//操作の記録を残す失敗しても、元の操作は取り消さない
 func (a *AuditLog) Record(ctx context.Context, userID, action, targetType, targetID, details string) {
 	if a == nil || a.repo == nil {
 		return

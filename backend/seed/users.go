@@ -5,15 +5,13 @@ import (
 	"fmt"
 	"log"
 
-	"golang.org/x/crypto/bcrypt"
-
 	"escalator/entity"
 	"escalator/port"
 	"escalator/rule"
 )
 
-// 利用者が1人も無いときだけ、サンプルの管理者、担当者、申請者を登録する
-func SeedUsersIfEmpty(ctx context.Context, users port.UserRepository, customers port.CustomerRepository, password string, cost int) error {
+//利用者が1人も無いときだけ、サンプルの管理者、担当者、申請者を登録する
+func SeedUsersIfEmpty(ctx context.Context, users port.UserRepository, customers port.CustomerRepository, password string, passwords port.PasswordHasher) error {
 	count, err := users.Count(ctx)
 	if err != nil {
 		return err
@@ -25,18 +23,18 @@ func SeedUsersIfEmpty(ctx context.Context, users port.UserRepository, customers 
 		log.Printf("サンプル利用者のパスワードが無いため、利用者は入れませんでした")
 		return nil
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), cost)
+	hash, err := passwords.Hash(password)
 	if err != nil {
 		return err
 	}
-	if err := saveStaff(ctx, users, string(hash), password); err != nil {
+	if err := saveStaff(ctx, users, hash, password); err != nil {
 		return err
 	}
 	listed, err := customers.List(ctx)
 	if err != nil {
 		return err
 	}
-	return saveApplicants(ctx, users, listed, string(hash), password)
+	return saveApplicants(ctx, users, listed, hash, password)
 }
 
 func saveStaff(ctx context.Context, users port.UserRepository, hash, password string) error {

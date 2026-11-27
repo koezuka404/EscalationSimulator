@@ -68,9 +68,9 @@ func Me(e *echo.Echo, api *controller.MeAPI, require echo.MiddlewareFunc) {
 	e.GET("/api/me", api.Show, require)
 }
 
-func Auth(e *echo.Echo, api *controller.AuthAPI, limits *middleware.Limiter) {
+func Auth(e *echo.Echo, api *controller.AuthAPI, limits *middleware.Limiter, csrf echo.MiddlewareFunc) {
 	e.POST("/api/auth/register", api.Register, limits.Register)
 	e.POST("/api/auth/login", api.Login, limits.Login)
-	e.POST("/api/auth/logout", api.Logout)
-	e.POST("/api/auth/refresh", api.Refresh, limits.Refresh)
+	e.POST("/api/auth/logout", api.Logout, csrf)
+	e.POST("/api/auth/refresh", api.Refresh, limits.Refresh, csrf)
 }

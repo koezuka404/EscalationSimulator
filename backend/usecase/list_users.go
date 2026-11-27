@@ -17,7 +17,7 @@ func NewListUsers(users port.UserRepository, current *CurrentUser) *ListUsers {
 	return &ListUsers{users: users, current: current}
 }
 
-// 管理者が利用者の一覧を取る
+//管理者が利用者の一覧を取る
 func (l *ListUsers) Execute(ctx context.Context, authorization string) ([]entity.User, error) {
 	actor, err := l.current.Execute(ctx, authorization)
 	if err != nil {

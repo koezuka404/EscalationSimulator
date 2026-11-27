@@ -13,7 +13,7 @@ type PriorityLock interface {
 	Unlock(ctx context.Context, key, token string) error
 }
 
-// 点数のやり直しが重ならないように、先に取れたときだけ実行する
+//点数のやり直しが重ならないように、先に取れたときだけ実行する
 func WithPriorityLock(ctx context.Context, locks PriorityLock, every time.Duration, missed string, run func()) {
 	if ctx.Err() != nil {
 		return

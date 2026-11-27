@@ -24,7 +24,7 @@ func NewDeleteUser(users port.UserRepository, customers port.CustomerRepository,
 	return &DeleteUser{users: users, customers: customers, statuses: statuses, queue: queue, current: current, notices: notices, audit: audit}
 }
 
-// 管理者だけが停止中の利用者を削除する
+//管理者だけが停止中の利用者を削除する
 func (d *DeleteUser) Execute(ctx context.Context, authorization, userID string) (entity.User, error) {
 	actor, err := d.current.Execute(ctx, authorization)
 	if err != nil {

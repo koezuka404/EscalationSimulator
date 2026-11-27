@@ -8,7 +8,6 @@ import (
 	"escalator/entity"
 	"escalator/port"
 	"escalator/rule"
-	"escalator/usecase/crypto"
 )
 
 type ScreenConnection interface {
@@ -16,48 +15,44 @@ type ScreenConnection interface {
 }
 
 type Refresh struct {
-	users      port.UserRepository
-	sessions   port.SessionRepository
-	secret     []byte
-	issuer     string
-	audience   string
-	accessTTL  time.Duration
-	refreshTTL time.Duration
-	screens    ScreenConnection
-	audit      *AuditLog
+	users    port.UserRepository
+	sessions port.SessionRepository
+	tokens   port.TokenIssuer
+	secrets  port.SecretTokens
+	policy   SessionPolicy
+	screens  ScreenConnection
+	audit    *AuditLog
 }
 
-func NewRefresh(users port.UserRepository, sessions port.SessionRepository, secret []byte, issuer, audience string, accessTTL, refreshTTL time.Duration, screens ScreenConnection, audit *AuditLog) *Refresh {
+func NewRefresh(users port.UserRepository, sessions port.SessionRepository, tokens port.TokenIssuer, secrets port.SecretTokens, policy SessionPolicy, screens ScreenConnection, audit *AuditLog) *Refresh {
 	return &Refresh{
-		users:      users,
-		sessions:   sessions,
-		secret:     secret,
-		issuer:     issuer,
-		audience:   audience,
-		accessTTL:  accessTTL,
-		refreshTTL: refreshTTL,
-		screens:    screens,
-		audit:      audit,
+		users:    users,
+		sessions: sessions,
+		tokens:   tokens,
+		secrets:  secrets,
+		policy:   policy,
+		screens:  screens,
+		audit:    audit,
 	}
 }
 
-// 再ログイン用の印を新しい印に替え、使い回しを見つけたら画面の接続を切る
+//再ログイン用の印を新しい印に替え、使い回しを見つけたら画面の接続を切る
 func (r *Refresh) Execute(ctx context.Context, refreshToken string) (LoginResult, error) {
 	if refreshToken == "" {
 		return LoginResult{}, rule.ErrInvalidRefresh
 	}
 	now := time.Now()
-	raw, hash, err := crypto.NewSecretToken()
+	raw, hash, err := r.secrets.New()
 	if err != nil {
 		return LoginResult{}, err
 	}
-	csrfToken, _, err := crypto.NewSecretToken()
+	csrfToken, _, err := r.secrets.New()
 	if err != nil {
 		return LoginResult{}, err
 	}
-	userID, reused, err := r.sessions.Rotate(ctx, crypto.Hash(refreshToken), entity.Session{
+	userID, reused, err := r.sessions.Rotate(ctx, r.secrets.Hash(refreshToken), entity.Session{
 		TokenHash: hash,
-		ExpiresAt: now.Add(r.refreshTTL),
+		ExpiresAt: now.Add(r.policy.RefreshTTL),
 	}, now)
 	if err != nil {
 		return LoginResult{}, err
@@ -78,7 +73,7 @@ func (r *Refresh) Execute(ctx context.Context, refreshToken string) (LoginResult
 	if err != nil || user.Status != entity.StatusActive {
 		return LoginResult{}, rule.ErrInvalidRefresh
 	}
-	accessToken, expiresAt, err := crypto.IssueAccess(r.secret, r.issuer, r.audience, user.ID, user.AuthVersion, r.accessTTL, now)
+	accessToken, expiresAt, err := r.tokens.Issue(user.ID, user.AuthVersion, now)
 	if err != nil {
 		return LoginResult{}, err
 	}

@@ -37,7 +37,7 @@ func NewSearchTickets(tickets port.TicketRepository, customers port.CustomerRepo
 	return &SearchTickets{tickets: tickets, customers: customers, users: users, current: current}
 }
 
-// 管理者に、条件に合うチケットを更新が新しい順で返す
+//管理者に、条件に合うチケットを更新が新しい順で返す
 func (s *SearchTickets) Execute(ctx context.Context, authorization, status string, severity int, customerID, assigneeID string) ([]FoundTicket, error) {
 	actor, err := s.current.Execute(ctx, authorization)
 	if err != nil {

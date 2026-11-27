@@ -23,7 +23,7 @@ func NewChangeSeverity(tickets port.TicketRepository, customers port.CustomerRep
 	return &ChangeSeverity{tickets: tickets, customers: customers, current: current, queue: queue, notices: notices, audit: audit}
 }
 
-// 緊急度を変え、対応待ちなら待ち順の点数も直す
+//緊急度を変え、対応待ちなら待ち順の点数も直す
 func (c *ChangeSeverity) Execute(ctx context.Context, authorization, ticketID, reason string, severity int) (entity.Ticket, error) {
 	reason, err := rule.SeverityReason(reason)
 	if err != nil {

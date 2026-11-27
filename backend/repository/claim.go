@@ -33,7 +33,7 @@ func MigrateAgentStatuses(db *gorm.DB) error {
 	return db.AutoMigrate(&agentStatusRow{})
 }
 
-// 待機中の担当者に点数がいちばん高い対応待ちを渡す
+//待機中の担当者に点数がいちばん高い対応待ちを渡す
 func (r *claimRepository) ClaimNext(ctx context.Context, agentID string, queue port.TicketQueue, overdue func(createdAt time.Time, slaMinutes int, now time.Time) bool) (entity.Ticket, error) {
 	var claimed entity.Ticket
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -106,7 +106,7 @@ func (r *claimRepository) ClaimNext(ctx context.Context, agentID string, queue p
 	return claimed, nil
 }
 
-// 初めて担当が付いた時刻を残し、その時点で約束時間を過ぎていれば印を付ける
+//初めて担当が付いた時刻を残し、その時点で約束時間を過ぎていれば印を付ける
 func stampClaimTimes(tx *gorm.DB, row ticketRow, now time.Time, overdue func(createdAt time.Time, slaMinutes int, now time.Time) bool) error {
 	updates := map[string]any{}
 	if row.FirstClaimedAt == nil {

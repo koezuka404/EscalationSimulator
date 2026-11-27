@@ -41,7 +41,7 @@ func NewReleaseDisconnectedAgents(users port.UserRepository, customers port.Cust
 	}
 }
 
-// 接続がすべて切れてから一定時間戻らない担当者を離席にし、対応中を待ちに戻す
+//接続がすべて切れてから一定時間戻らない担当者を離席にし、対応中を待ちに戻す
 func (r *ReleaseDisconnectedAgents) Execute(ctx context.Context) error {
 	due := r.presence.AgentsGoneSince(time.Now().Add(-r.grace))
 	for _, id := range due {

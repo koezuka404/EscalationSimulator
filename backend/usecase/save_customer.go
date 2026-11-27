@@ -29,7 +29,7 @@ func (c *Customers) allow(ctx context.Context, authorization string) (entity.Use
 	return actor, nil
 }
 
-// 管理者だけが顧客の一覧を返す
+//管理者だけが顧客の一覧を返す
 func (c *Customers) List(ctx context.Context, authorization string) ([]entity.Customer, error) {
 	if _, err := c.allow(ctx, authorization); err != nil {
 		return nil, err
@@ -37,7 +37,7 @@ func (c *Customers) List(ctx context.Context, authorization string) ([]entity.Cu
 	return c.repo.List(ctx)
 }
 
-// 管理者だけが顧客を登録する
+//管理者だけが顧客を登録する
 func (c *Customers) Create(ctx context.Context, authorization, name string, plan entity.Plan, slaMinutes int) (entity.Customer, error) {
 	if _, err := c.allow(ctx, authorization); err != nil {
 		return entity.Customer{}, err
@@ -49,7 +49,7 @@ func (c *Customers) Create(ctx context.Context, authorization, name string, plan
 	return c.repo.Save(ctx, customer)
 }
 
-// 管理者だけが顧客の名前、プラン、目標時間を更新する
+//管理者だけが顧客の名前、プラン、目標時間を更新する
 func (c *Customers) Update(ctx context.Context, authorization, id, name string, plan entity.Plan, slaMinutes int) (entity.Customer, error) {
 	actor, err := c.allow(ctx, authorization)
 	if err != nil {

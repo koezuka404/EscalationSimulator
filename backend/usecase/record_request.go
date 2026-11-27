@@ -17,7 +17,7 @@ func NewRequestLog(repo port.RequestLogRepository) *RequestLog {
 	return &RequestLog{repo: repo}
 }
 
-// 受け付けた操作を1件残す失敗しても、応答は取り消さない
+//受け付けた操作を1件残す失敗しても、応答は取り消さない
 func (r *RequestLog) Save(ctx context.Context, requestID, userID, method, path string, status, latencyMS int, errorCode string) {
 	if r == nil || r.repo == nil {
 		return

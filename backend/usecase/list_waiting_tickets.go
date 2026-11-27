@@ -34,7 +34,7 @@ func NewListWaitingTickets(tickets port.TicketRepository, customers port.Custome
 	return &ListWaitingTickets{tickets: tickets, customers: customers, current: current}
 }
 
-// 担当者と管理者に、対応待ちを点数の高い順で返す
+//担当者と管理者に、対応待ちを点数の高い順で返す
 func (l *ListWaitingTickets) Execute(ctx context.Context, authorization string) ([]WaitingTicket, error) {
 	actor, err := l.current.Execute(ctx, authorization)
 	if err != nil {

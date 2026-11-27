@@ -44,7 +44,7 @@ func MigrateDemoRuns(db *gorm.DB) error {
 	return db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS demo_runs_one_running ON demo_runs (status) WHERE status = 'running'").Error
 }
 
-// 実行中のデモを1件だけ作り、すでに実行中なら拒否する
+//実行中のデモを1件だけ作り、すでに実行中なら拒否する
 func (r *demoRepository) Start(ctx context.Context, run entity.DemoRun) (entity.DemoRun, error) {
 	if run.ID == "" {
 		run.ID = uuid.NewString()
@@ -68,7 +68,7 @@ func (r *demoRepository) Start(ctx context.Context, run entity.DemoRun) (entity.
 	return demoFromRow(row), nil
 }
 
-// 作った件数を1つ増やす実行中でなければ増やさない
+//作った件数を1つ増やす実行中でなければ増やさない
 func (r *demoRepository) AddGenerated(ctx context.Context, id string) (entity.DemoRun, error) {
 	var row demoRunRow
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -87,7 +87,7 @@ func (r *demoRepository) AddGenerated(ctx context.Context, id string) (entity.De
 	return demoFromRow(row), nil
 }
 
-// 実行中のデモを完了か停止にするすでに止まっていれば変えない
+//実行中のデモを完了か停止にするすでに止まっていれば変えない
 func (r *demoRepository) Finish(ctx context.Context, id, status string, at time.Time) (entity.DemoRun, bool, error) {
 	result := r.db.WithContext(ctx).Model(&demoRunRow{}).
 		Where("id = ? AND status = ?", id, entity.DemoRunning).
@@ -105,7 +105,7 @@ func (r *demoRepository) Finish(ctx context.Context, id, status string, at time.
 	return demoFromRow(row), result.RowsAffected > 0, nil
 }
 
-// 実行中のデモを止める実行中が無ければエラーにする
+//実行中のデモを止める実行中が無ければエラーにする
 func (r *demoRepository) StopRunning(ctx context.Context, at time.Time) (entity.DemoRun, error) {
 	var row demoRunRow
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -129,7 +129,7 @@ func (r *demoRepository) StopRunning(ctx context.Context, at time.Time) (entity.
 	return demoFromRow(row), nil
 }
 
-// 起動時に、途中で残った実行中を停止にする
+//起動時に、途中で残った実行中を停止にする
 func (r *demoRepository) CloseInterrupted(ctx context.Context, at time.Time) error {
 	return r.db.WithContext(ctx).Model(&demoRunRow{}).
 		Where("status = ?", entity.DemoRunning).

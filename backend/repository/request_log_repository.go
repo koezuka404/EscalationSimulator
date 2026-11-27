@@ -37,7 +37,7 @@ func MigrateRequestLogs(db *gorm.DB) error {
 	return db.AutoMigrate(&requestLogRow{})
 }
 
-// 受け付けた操作の記録を1件残す
+//受け付けた操作の記録を1件残す
 func (r *requestLogRepository) Save(ctx context.Context, entry entity.RequestLogEntry) error {
 	if entry.ID == "" {
 		entry.ID = uuid.NewString()

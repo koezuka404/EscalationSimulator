@@ -26,9 +26,9 @@ func NewTicketAPI(create createTicketUsecase, close closeTicketUsecase, severity
 	return &TicketAPI{create: create, close: close, severity: severity, release: release, mine: mine, show: show, note: note}
 }
 
-// 申請者の自分のチケット一覧を返す
+//申請者の自分のチケット一覧を返す
 func (a *TicketAPI) ListMine(c echo.Context) error {
-	tickets, err := a.mine.Execute(c.Request().Context(), c.Request().Header.Get("Authorization"))
+	tickets, err := a.mine.Execute(c.Request().Context(), accessToken(c))
 	if err != nil {
 		return writeMyTicketsError(c, err)
 	}
@@ -39,22 +39,22 @@ func (a *TicketAPI) ListMine(c echo.Context) error {
 	return c.JSON(http.StatusOK, body)
 }
 
-// チケットの詳細を返す
+//チケットの詳細を返す
 func (a *TicketAPI) Show(c echo.Context) error {
-	detail, err := a.show.Execute(c.Request().Context(), c.Request().Header.Get("Authorization"), c.Param("id"))
+	detail, err := a.show.Execute(c.Request().Context(), accessToken(c), c.Param("id"))
 	if err != nil {
 		return writeShowTicketError(c, err)
 	}
 	return c.JSON(http.StatusOK, toTicketDetailJSON(detail))
 }
 
-// 対応メモの追加を受ける
+//対応メモの追加を受ける
 func (a *TicketAPI) AddNote(c echo.Context) error {
 	var body workNoteRequestJSON
 	if err := c.Bind(&body); err != nil {
 		return c.JSON(http.StatusBadRequest, messageJSON{Message: "送られた内容を読み取れませんでした。対応メモを入力してください"})
 	}
-	note, err := a.note.Execute(c.Request().Context(), c.Request().Header.Get("Authorization"), c.Param("id"), body.Body)
+	note, err := a.note.Execute(c.Request().Context(), accessToken(c), c.Param("id"), body.Body)
 	if err != nil {
 		return writeWorkNoteError(c, err)
 	}
@@ -67,7 +67,7 @@ func (a *TicketAPI) AddNote(c echo.Context) error {
 	})
 }
 
-// チケットの起票を受ける
+//チケットの起票を受ける
 func (a *TicketAPI) Create(c echo.Context) error {
 	var body createTicketJSON
 	if err := c.Bind(&body); err != nil {
@@ -75,7 +75,7 @@ func (a *TicketAPI) Create(c echo.Context) error {
 	}
 	ticket, err := a.create.Execute(
 		c.Request().Context(),
-		c.Request().Header.Get("Authorization"),
+		accessToken(c),
 		body.Title,
 		body.Description,
 		body.Category,
@@ -87,35 +87,35 @@ func (a *TicketAPI) Create(c echo.Context) error {
 	return c.JSON(http.StatusCreated, toTicketJSON(ticket))
 }
 
-// チケットの完了を受ける
+//チケットの完了を受ける
 func (a *TicketAPI) Close(c echo.Context) error {
 	var body closeTicketJSON
 	if err := c.Bind(&body); err != nil {
 		return c.JSON(http.StatusBadRequest, messageJSON{Message: "送られた内容を読み取れませんでした。終了コメントを入力してください"})
 	}
-	ticket, err := a.close.Execute(c.Request().Context(), c.Request().Header.Get("Authorization"), c.Param("id"), body.Comment)
+	ticket, err := a.close.Execute(c.Request().Context(), accessToken(c), c.Param("id"), body.Comment)
 	if err != nil {
 		return writeCloseTicketError(c, err)
 	}
 	return c.JSON(http.StatusOK, toTicketJSON(ticket))
 }
 
-// 緊急度の変更を受ける
+//緊急度の変更を受ける
 func (a *TicketAPI) Escalate(c echo.Context) error {
 	var body changeSeverityJSON
 	if err := c.Bind(&body); err != nil {
 		return c.JSON(http.StatusBadRequest, messageJSON{Message: "送られた内容を読み取れませんでした。緊急度と理由を入力してください"})
 	}
-	ticket, err := a.severity.Execute(c.Request().Context(), c.Request().Header.Get("Authorization"), c.Param("id"), body.Reason, body.Severity)
+	ticket, err := a.severity.Execute(c.Request().Context(), accessToken(c), c.Param("id"), body.Reason, body.Severity)
 	if err != nil {
 		return writeChangeSeverityError(c, err)
 	}
 	return c.JSON(http.StatusOK, toTicketJSON(ticket))
 }
 
-// 担当を外して待ちに戻す依頼を受ける
+//担当を外して待ちに戻す依頼を受ける
 func (a *TicketAPI) Release(c echo.Context) error {
-	ticket, err := a.release.Execute(c.Request().Context(), c.Request().Header.Get("Authorization"), c.Param("id"))
+	ticket, err := a.release.Execute(c.Request().Context(), accessToken(c), c.Param("id"))
 	if err != nil {
 		return writeReleaseError(c, err)
 	}

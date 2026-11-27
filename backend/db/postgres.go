@@ -19,7 +19,7 @@ func NewProbe(conn *gorm.DB) Probe {
 	return Probe{conn: conn}
 }
 
-// データベースが応答するか確かめる
+//データベースが応答するか確かめる
 func (p Probe) Ping(ctx context.Context) error {
 	sqlDB, err := p.conn.DB()
 	if err != nil {

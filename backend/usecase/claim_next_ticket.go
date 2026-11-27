@@ -26,7 +26,7 @@ func NewClaimNextTicket(claims port.ClaimStore, queue port.TicketQueue, current 
 	return &ClaimNextTicket{claims: claims, queue: queue, current: current, notices: notices, scores: scores, locks: locks, every: every, audit: audit}
 }
 
-// 担当者がいちばん先の対応待ちを引き取る
+//担当者がいちばん先の対応待ちを引き取る
 func (c *ClaimNextTicket) Execute(ctx context.Context, authorization string) (entity.Ticket, error) {
 	actor, err := c.current.Execute(ctx, authorization)
 	if err != nil {
@@ -57,7 +57,7 @@ func (c *ClaimNextTicket) Execute(ctx context.Context, authorization string) (en
 	return ticket, nil
 }
 
-// 3回担当を付けられなかったとき、対応待ちから待ち順を作り直す
+//3回担当を付けられなかったとき、対応待ちから待ち順を作り直す
 func (c *ClaimNextTicket) rebuildAfterMismatch(ctx context.Context) {
 	WithPriorityLock(ctx, c.locks, c.every, "待ち順の作り直しは、別のやり直しの途中だったため飛ばしました", func() {
 		if err := c.scores.Rebuild(ctx); err != nil {

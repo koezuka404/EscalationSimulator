@@ -46,12 +46,12 @@ type Gate struct {
 	client *goredis.Client
 }
 
-// 回数制限の保存先を、待ち順と同じ接続にする
+//回数制限の保存先を、待ち順と同じ接続にする
 func NewGate(order *TicketOrder) *Gate {
 	return &Gate{client: order.client}
 }
 
-// 残回数を1つ減らし、残っていれば受け付ける
+//残回数を1つ減らし、残っていれば受け付ける
 func (g *Gate) Take(ctx context.Context, key string, capacity int, perSecond float64) (bool, error) {
 	result, err := g.client.Eval(ctx, takeScript, []string{limitKeyPrefix + key}, capacity, perSecond, time.Now().UnixMilli()).Int()
 	if err != nil {

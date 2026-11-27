@@ -56,7 +56,7 @@ func (r *sessionRepository) RevokeByHash(ctx context.Context, tokenHash string) 
 	return r.db.WithContext(ctx).Model(&sessionRow{}).Where("token_hash = ?", tokenHash).Update("revoked", true).Error
 }
 
-// 再ログイン用の印から利用者IDを返す
+//再ログイン用の印から利用者IDを返す
 func (r *sessionRepository) FindUserIDByHash(ctx context.Context, tokenHash string) (string, error) {
 	var row sessionRow
 	err := r.db.WithContext(ctx).Where("token_hash = ?", tokenHash).First(&row).Error
@@ -69,7 +69,7 @@ func (r *sessionRepository) FindUserIDByHash(ctx context.Context, tokenHash stri
 	return row.UserID, nil
 }
 
-// 再ログイン用の印を新しい印に替える古い印の再使用は系統ごと無効にする
+//再ログイン用の印を新しい印に替える古い印の再使用は系統ごと無効にする
 func (r *sessionRepository) Rotate(ctx context.Context, oldHash string, next entity.Session, now time.Time) (string, bool, error) {
 	var userID string
 	var reused bool

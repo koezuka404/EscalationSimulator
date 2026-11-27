@@ -32,7 +32,7 @@ func NewChangeRole(users port.UserRepository, customers port.CustomerRepository,
 	}
 }
 
-// 管理者だけが利用者の役割を変え、担当者を申請者にするときは対応中を先に待ちへ戻す
+//管理者だけが利用者の役割を変え、担当者を申請者にするときは対応中を先に待ちへ戻す
 func (c *ChangeRole) Execute(ctx context.Context, authorization, userID, role, customerID string) (entity.User, error) {
 	actor, err := c.current.Execute(ctx, authorization)
 	if err != nil {

@@ -6,7 +6,7 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-// 許可した画面からの通信だけ、ブラウザに通す
+//許可した画面からの通信だけ、ブラウザに通す
 func AllowOrigin(origin string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {

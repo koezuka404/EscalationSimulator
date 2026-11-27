@@ -21,7 +21,7 @@ func NewAdminTicketAPI(search searchTicketsUsecase) *AdminTicketAPI {
 	return &AdminTicketAPI{search: search}
 }
 
-// 管理者の全件の絞り込みを受ける
+//管理者の全件の絞り込みを受ける
 func (a *AdminTicketAPI) Search(c echo.Context) error {
 	severity, err := querySeverity(c.QueryParam("severity"))
 	if err != nil {
@@ -29,7 +29,7 @@ func (a *AdminTicketAPI) Search(c echo.Context) error {
 	}
 	tickets, err := a.search.Execute(
 		c.Request().Context(),
-		c.Request().Header.Get("Authorization"),
+		accessToken(c),
 		strings.TrimSpace(c.QueryParam("status")),
 		severity,
 		strings.TrimSpace(c.QueryParam("customer_id")),

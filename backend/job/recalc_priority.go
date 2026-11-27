@@ -9,21 +9,22 @@ import (
 )
 
 type DashboardSummary interface {
-	Publish(ctx context.Context)
+	Publish(ctx context.Context, notices usecase.Notifier)
 }
 
 type RecalcPriority struct {
 	recalc    *usecase.RecalcOpenScores
 	dashboard DashboardSummary
+	notices   usecase.Notifier
 	locks     usecase.PriorityLock
 	every     time.Duration
 }
 
-func NewRecalcPriority(recalc *usecase.RecalcOpenScores, dashboard DashboardSummary, locks usecase.PriorityLock, every time.Duration) *RecalcPriority {
-	return &RecalcPriority{recalc: recalc, dashboard: dashboard, locks: locks, every: every}
+func NewRecalcPriority(recalc *usecase.RecalcOpenScores, dashboard DashboardSummary, notices usecase.Notifier, locks usecase.PriorityLock, every time.Duration) *RecalcPriority {
+	return &RecalcPriority{recalc: recalc, dashboard: dashboard, notices: notices, locks: locks, every: every}
 }
 
-// 起動時に待ち順を作り直し、その後は一定間隔で点数をやり直す
+//起動時に待ち順を作り直し、その後は一定間隔で点数をやり直す
 func (j *RecalcPriority) Run(ctx context.Context) {
 	j.rebuild(ctx)
 	ticker := time.NewTicker(j.every)
@@ -38,26 +39,26 @@ func (j *RecalcPriority) Run(ctx context.Context) {
 	}
 }
 
-// 他で実行中なら飛ばし、対応待ちだけを待ち順へ載せ直す
+//他で実行中なら飛ばし、対応待ちだけを待ち順へ載せ直す
 func (j *RecalcPriority) rebuild(ctx context.Context) {
 	j.withLock(ctx, "待ち順の作り直しは、別のやり直しの途中だったため飛ばしました", func() {
 		if err := j.recalc.Rebuild(ctx); err != nil {
 			log.Printf("待ち順を作り直せませんでした: %v", err)
 		}
 		if j.dashboard != nil {
-			j.dashboard.Publish(ctx)
+			j.dashboard.Publish(ctx, j.notices)
 		}
 	})
 }
 
-// 他で実行中なら飛ばし、対応待ちの点数をやり直し、現場の数字をまとめる
+//他で実行中なら飛ばし、対応待ちの点数をやり直し、現場の数字をまとめる
 func (j *RecalcPriority) runOnce(ctx context.Context) {
 	j.withLock(ctx, "", func() {
 		if err := j.recalc.Execute(ctx); err != nil {
 			log.Printf("対応待ちの点数をやり直せませんでした: %v", err)
 		}
 		if j.dashboard != nil {
-			j.dashboard.Publish(ctx)
+			j.dashboard.Publish(ctx, j.notices)
 		}
 	})
 }

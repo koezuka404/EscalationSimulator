@@ -8,7 +8,7 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-// 操作の途中で止まったとき、画面には短い説明だけを返す
+//操作の途中で止まったとき、画面には短い説明だけを返す
 func Recover() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) (err error) {

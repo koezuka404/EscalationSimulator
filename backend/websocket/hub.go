@@ -45,22 +45,34 @@ type outbound struct {
 	message usecase.Message
 }
 
+type actorLookup interface {
+	Execute(ctx context.Context, token string) (entity.User, error)
+}
+
+type queuePicture interface {
+	Execute(ctx context.Context) (usecase.QueuePicture, error)
+}
+
+type dashboardNumbers interface {
+	Collect(ctx context.Context) (usecase.Dashboard, error)
+}
+
 type Hub struct {
 	clients     map[*client]struct{}
 	register    chan *client
 	unregister  chan *client
 	broadcast   chan outbound
 	closeUser   chan closeUserRequest
-	current     *usecase.CurrentUser
-	snapshot    *usecase.QueueSnapshot
-	dashboard   *usecase.ShowDashboard
+	current     actorLookup
+	snapshot    queuePicture
+	dashboard   dashboardNumbers
 	connections ConnectionRecord
 	upgrader    websocket.Upgrader
 	mu          sync.Mutex
 	goneSince   map[string]time.Time
 }
 
-func NewHub(current *usecase.CurrentUser, snapshot *usecase.QueueSnapshot, dashboard *usecase.ShowDashboard, connections ConnectionRecord, origin string) *Hub {
+func NewHub(current actorLookup, snapshot queuePicture, dashboard dashboardNumbers, connections ConnectionRecord, origin string) *Hub {
 	hub := &Hub{
 		clients:     make(map[*client]struct{}),
 		register:    make(chan *client),
@@ -255,7 +267,7 @@ func (h *Hub) Serve(c echo.Context) error {
 	if token == "" {
 		return c.JSON(http.StatusUnauthorized, map[string]string{"message": rule.ErrUnauthenticated.Error()})
 	}
-	actor, err := h.current.Execute(c.Request().Context(), "Bearer "+token)
+	actor, err := h.current.Execute(c.Request().Context(), token)
 	if err != nil {
 		if errors.Is(err, rule.ErrUnauthenticated) {
 			return c.JSON(http.StatusUnauthorized, map[string]string{"message": err.Error()})

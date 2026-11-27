@@ -11,7 +11,7 @@ const RequestIDHeader = "X-Request-ID"
 
 const requestIDKey = "request_id"
 
-// 操作ごとに番号を付け、応答にも載せる
+//操作ごとに番号を付け、応答にも載せる
 func RequestID() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {

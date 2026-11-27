@@ -18,9 +18,9 @@ func NewDashboardAPI(show showDashboardUsecase) *DashboardAPI {
 	return &DashboardAPI{show: show}
 }
 
-// 管理者に現場の数字を返す
+//管理者に現場の数字を返す
 func (a *DashboardAPI) Show(c echo.Context) error {
-	numbers, err := a.show.Execute(c.Request().Context(), c.Request().Header.Get("Authorization"))
+	numbers, err := a.show.Execute(c.Request().Context(), accessToken(c))
 	if err != nil {
 		return writeDashboardError(c, err)
 	}

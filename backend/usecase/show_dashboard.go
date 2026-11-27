@@ -27,18 +27,13 @@ type ShowDashboard struct {
 	customers port.CustomerRepository
 	statuses  port.AgentStatusRepository
 	current   *CurrentUser
-	notices   Notifier
 }
 
 func NewShowDashboard(tickets port.TicketRepository, customers port.CustomerRepository, statuses port.AgentStatusRepository, current *CurrentUser) *ShowDashboard {
 	return &ShowDashboard{tickets: tickets, customers: customers, statuses: statuses, current: current}
 }
 
-func (s *ShowDashboard) SetNotifier(notices Notifier) {
-	s.notices = notices
-}
-
-// 管理者に、現場の数字を返す
+//管理者に、現場の数字を返す
 func (s *ShowDashboard) Execute(ctx context.Context, authorization string) (Dashboard, error) {
 	actor, err := s.current.Execute(ctx, authorization)
 	if err != nil {
@@ -50,7 +45,7 @@ func (s *ShowDashboard) Execute(ctx context.Context, authorization string) (Dash
 	return s.Collect(ctx)
 }
 
-// 待ち、対応中、平均時間、約束時間オーバー、担当者の空きをまとめる
+//待ち、対応中、平均時間、約束時間オーバー、担当者の空きをまとめる
 func (s *ShowDashboard) Collect(ctx context.Context) (Dashboard, error) {
 	now := time.Now()
 	since := now.Add(-24 * time.Hour)
@@ -110,14 +105,14 @@ func (s *ShowDashboard) Collect(ctx context.Context) (Dashboard, error) {
 	return numbers, nil
 }
 
-// 管理者の画面へ、現場の数字を届ける
-func (s *ShowDashboard) Publish(ctx context.Context) {
+//管理者の画面へ、現場の数字を届ける
+func (s *ShowDashboard) Publish(ctx context.Context, notices Notifier) {
 	numbers, err := s.Collect(ctx)
 	if err != nil {
 		log.Printf("現場の数字をまとめられませんでした: %v", err)
 		return
 	}
-	publishAdmins(s.notices, DashboardMessage(numbers))
+	publishAdmins(notices, DashboardMessage(numbers))
 }
 
 func DashboardMessage(numbers Dashboard) map[string]any {

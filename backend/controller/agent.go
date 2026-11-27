@@ -17,13 +17,13 @@ func NewAgentAPI(status changeAgentStatusUsecase) *AgentAPI {
 	return &AgentAPI{status: status}
 }
 
-// 稼働の切り替えを受ける
+//稼働の切り替えを受ける
 func (a *AgentAPI) Update(c echo.Context) error {
 	var body agentStatusJSON
 	if err := c.Bind(&body); err != nil {
 		return c.JSON(http.StatusBadRequest, messageJSON{Message: "送られた内容を読み取れませんでした。待機中か離席を選んでください"})
 	}
-	status, err := a.status.Execute(c.Request().Context(), c.Request().Header.Get("Authorization"), body.UserID, body.Status)
+	status, err := a.status.Execute(c.Request().Context(), accessToken(c), body.UserID, body.Status)
 	if err != nil {
 		return writeAgentStatusError(c, err)
 	}

@@ -8,15 +8,15 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	"escalator/usecase/crypto"
+	"escalator/port"
 )
 
 type RequestRecorder interface {
 	Save(ctx context.Context, requestID, userID, method, path string, status, latencyMS int, errorCode string)
 }
 
-// 受け付けた操作の番号、経路、状態、かかった時間を残す
-func AccessLog(secret []byte, issuer, audience string, records RequestRecorder) echo.MiddlewareFunc {
+//受け付けた操作の番号、経路、状態、かかった時間を残す
+func AccessLog(tokens port.TokenVerifier, records RequestRecorder) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			started := time.Now()
@@ -35,7 +35,7 @@ func AccessLog(secret []byte, issuer, audience string, records RequestRecorder) 
 			)
 			if records != nil {
 				saveCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-				records.Save(saveCtx, RequestIDFrom(c), accessUserID(c, secret, issuer, audience), c.Request().Method, c.Request().URL.Path, status, int(latency.Milliseconds()), errorCode(status))
+				records.Save(saveCtx, RequestIDFrom(c), accessUserID(c, tokens), c.Request().Method, c.Request().URL.Path, status, int(latency.Milliseconds()), errorCode(status))
 				cancel()
 			}
 			return err
@@ -43,12 +43,12 @@ func AccessLog(secret []byte, issuer, audience string, records RequestRecorder) 
 	}
 }
 
-func accessUserID(c echo.Context, secret []byte, issuer, audience string) string {
-	raw := bearerToken(c.Request().Header.Get("Authorization"))
-	if raw == "" {
+func accessUserID(c echo.Context, tokens port.TokenVerifier) string {
+	raw := BearerToken(c.Request().Header.Get("Authorization"))
+	if raw == "" || tokens == nil {
 		return ""
 	}
-	userID, _, err := crypto.ParseAccess(secret, issuer, audience, raw)
+	userID, _, err := tokens.Parse(raw)
 	if err != nil {
 		return ""
 	}

@@ -22,7 +22,7 @@ func NewCloseTicket(tickets port.TicketRepository, queue port.TicketQueue, curre
 	return &CloseTicket{tickets: tickets, queue: queue, current: current, notices: notices, audit: audit}
 }
 
-// 対応中のチケットを完了にする
+//対応中のチケットを完了にする
 func (c *CloseTicket) Execute(ctx context.Context, authorization, ticketID, comment string) (entity.Ticket, error) {
 	comment, err := rule.CloseCommentText(comment)
 	if err != nil {

@@ -19,9 +19,9 @@ func NewQueueAPI(list listWaitingUsecase, claim claimTicketUsecase) *QueueAPI {
 	return &QueueAPI{list: list, claim: claim}
 }
 
-// 待ち順の一覧を返す
+//待ち順の一覧を返す
 func (a *QueueAPI) List(c echo.Context) error {
-	waiting, err := a.list.Execute(c.Request().Context(), c.Request().Header.Get("Authorization"))
+	waiting, err := a.list.Execute(c.Request().Context(), accessToken(c))
 	if err != nil {
 		return writeQueueError(c, err)
 	}
@@ -32,9 +32,9 @@ func (a *QueueAPI) List(c echo.Context) error {
 	return c.JSON(http.StatusOK, body)
 }
 
-// 次の1件の引き取りを受ける
+//次の1件の引き取りを受ける
 func (a *QueueAPI) Claim(c echo.Context) error {
-	ticket, err := a.claim.Execute(c.Request().Context(), c.Request().Header.Get("Authorization"))
+	ticket, err := a.claim.Execute(c.Request().Context(), accessToken(c))
 	if err != nil {
 		return writeClaimError(c, err)
 	}

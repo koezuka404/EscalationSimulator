@@ -58,7 +58,7 @@ func (r *userRepository) Save(ctx context.Context, user entity.User) (entity.Use
 	return userFromRow(row), nil
 }
 
-// 担当者を保存し、稼働を待機中で作る
+//担当者を保存し、稼働を待機中で作る
 func (r *userRepository) SaveAgent(ctx context.Context, user entity.User) (entity.User, error) {
 	if user.ID == "" {
 		user.ID = uuid.NewString()
@@ -136,7 +136,7 @@ func (r *userRepository) UpdateCustomer(ctx context.Context, user entity.User) e
 	return nil
 }
 
-// 利用者の状態と認証の版を保存する
+//利用者の状態と認証の版を保存する
 func (r *userRepository) UpdateStatus(ctx context.Context, user entity.User) error {
 	result := r.db.WithContext(ctx).Model(&userRow{}).Where("id = ?", user.ID).Updates(map[string]any{
 		"status":       string(user.Status),
@@ -151,7 +151,7 @@ func (r *userRepository) UpdateStatus(ctx context.Context, user entity.User) err
 	return nil
 }
 
-// 役割と所属顧客と認証の版を保存し、担当者には稼働を作り、申請者にしたときは稼働を消す
+//役割と所属顧客と認証の版を保存し、担当者には稼働を作り、申請者にしたときは稼働を消す
 func (r *userRepository) UpdateRole(ctx context.Context, user entity.User) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		result := tx.Model(&userRow{}).Where("id = ?", user.ID).Updates(map[string]any{
@@ -175,7 +175,7 @@ func (r *userRepository) UpdateRole(ctx context.Context, user entity.User) error
 	})
 }
 
-// 利用者を削除済みにし、メールアドレスと認証の版を保存し、稼働の記録を消す
+//利用者を削除済みにし、メールアドレスと認証の版を保存し、稼働の記録を消す
 func (r *userRepository) MarkDeleted(ctx context.Context, user entity.User) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		result := tx.Model(&userRow{}).Where("id = ? AND status = ?", user.ID, string(entity.StatusSuspended)).Updates(map[string]any{
@@ -193,14 +193,14 @@ func (r *userRepository) MarkDeleted(ctx context.Context, user entity.User) erro
 	})
 }
 
-// 利用者の人数を返す
+//利用者の人数を返す
 func (r *userRepository) Count(ctx context.Context) (int, error) {
 	var count int64
 	err := r.db.WithContext(ctx).Model(&userRow{}).Count(&count).Error
 	return int(count), err
 }
 
-// 削除済み以外の利用者を名前順で返す
+//削除済み以外の利用者を名前順で返す
 func (r *userRepository) List(ctx context.Context) ([]entity.User, error) {
 	var rows []userRow
 	err := r.db.WithContext(ctx).
@@ -218,7 +218,7 @@ func (r *userRepository) List(ctx context.Context) ([]entity.User, error) {
 	return users, nil
 }
 
-// 顧客に結びついている申請者を返す
+//顧客に結びついている申請者を返す
 func (r *userRepository) ListApplicants(ctx context.Context) ([]entity.User, error) {
 	var rows []userRow
 	err := r.db.WithContext(ctx).
@@ -235,7 +235,7 @@ func (r *userRepository) ListApplicants(ctx context.Context) ([]entity.User, err
 	return users, nil
 }
 
-// 利用者IDから名前を返す
+//利用者IDから名前を返す
 func (r *userRepository) ListNames(ctx context.Context, ids []string) (map[string]string, error) {
 	names := make(map[string]string, len(ids))
 	if len(ids) == 0 {

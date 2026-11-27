@@ -108,3 +108,21 @@ type LoginAttemptRepository interface {
 	Find(ctx context.Context, email, ip string) (entity.LoginAttempt, error)
 	Save(ctx context.Context, attempt entity.LoginAttempt) error
 }
+
+type PasswordHasher interface {
+	Hash(password string) (string, error)
+	Matches(hash, password string) bool
+}
+
+type TokenIssuer interface {
+	Issue(userID string, authVersion int, now time.Time) (string, time.Time, error)
+}
+
+type TokenVerifier interface {
+	Parse(raw string) (userID string, authVersion int, err error)
+}
+
+type SecretTokens interface {
+	New() (raw, hash string, err error)
+	Hash(raw string) string
+}

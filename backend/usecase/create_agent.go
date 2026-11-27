@@ -3,24 +3,22 @@ package usecase
 import (
 	"context"
 
-	"golang.org/x/crypto/bcrypt"
-
 	"escalator/entity"
 	"escalator/port"
 	"escalator/rule"
 )
 
 type CreateAgent struct {
-	users   port.UserRepository
-	current *CurrentUser
-	cost    int
+	users    port.UserRepository
+	current  *CurrentUser
+	password port.PasswordHasher
 }
 
-func NewCreateAgent(users port.UserRepository, current *CurrentUser, cost int) *CreateAgent {
-	return &CreateAgent{users: users, current: current, cost: cost}
+func NewCreateAgent(users port.UserRepository, current *CurrentUser, password port.PasswordHasher) *CreateAgent {
+	return &CreateAgent{users: users, current: current, password: password}
 }
 
-// 管理者が担当者を登録する
+//管理者が担当者を登録する
 func (c *CreateAgent) Execute(ctx context.Context, authorization, name, email, password string) (entity.User, error) {
 	actor, err := c.current.Execute(ctx, authorization)
 	if err != nil {
@@ -33,10 +31,10 @@ func (c *CreateAgent) Execute(ctx context.Context, authorization, name, email, p
 	if err != nil {
 		return entity.User{}, err
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), c.cost)
+	hash, err := c.password.Hash(password)
 	if err != nil {
 		return entity.User{}, err
 	}
-	user.PasswordHash = string(hash)
+	user.PasswordHash = hash
 	return c.users.SaveAgent(ctx, user)
 }

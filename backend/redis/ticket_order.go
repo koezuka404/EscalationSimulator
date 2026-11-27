@@ -33,7 +33,7 @@ type TicketOrder struct {
 	client *goredis.Client
 }
 
-// 待ち順の保存先へつなぐ
+//待ち順の保存先へつなぐ
 func Open(rawURL string) (*TicketOrder, error) {
 	opt, err := goredis.ParseURL(rawURL)
 	if err != nil {
@@ -53,12 +53,12 @@ func (o *TicketOrder) Close() error {
 	return o.client.Close()
 }
 
-// 待ち順の保存先が応答するか確かめる
+//待ち順の保存先が応答するか確かめる
 func (o *TicketOrder) Ping(ctx context.Context) error {
 	return o.client.Ping(ctx).Err()
 }
 
-// チケットのIDと点数を待ち順へ載せる
+//チケットのIDと点数を待ち順へ載せる
 func (o *TicketOrder) Enqueue(ctx context.Context, ticketID string, score int) error {
 	return o.client.ZAdd(ctx, ticketQueueKey, goredis.Z{
 		Score:  float64(score),
@@ -66,7 +66,7 @@ func (o *TicketOrder) Enqueue(ctx context.Context, ticketID string, score int) e
 	}).Err()
 }
 
-// 点数がいちばん高い1件を取り待ち順から消す
+//点数がいちばん高い1件を取り待ち順から消す
 func (o *TicketOrder) PopMax(ctx context.Context) (string, int, bool, error) {
 	values, err := o.client.ZPopMax(ctx, ticketQueueKey, 1).Result()
 	if err == goredis.Nil {
@@ -85,12 +85,12 @@ func (o *TicketOrder) PopMax(ctx context.Context) (string, int, bool, error) {
 	return id, int(math.Round(values[0].Score)), true, nil
 }
 
-// 待ち順からチケットを外す
+//待ち順からチケットを外す
 func (o *TicketOrder) Remove(ctx context.Context, ticketID string) error {
 	return o.client.ZRem(ctx, ticketQueueKey, ticketID).Err()
 }
 
-// 待ち順を空にして、渡されたチケットだけを載せる
+//待ち順を空にして、渡されたチケットだけを載せる
 func (o *TicketOrder) Replace(ctx context.Context, ticketIDs []string, scores []int) error {
 	if len(ticketIDs) != len(scores) {
 		return fmt.Errorf("待ち順に載せる件数と点数が合いません")
@@ -102,7 +102,7 @@ func (o *TicketOrder) Replace(ctx context.Context, ticketIDs []string, scores []
 	return o.client.Eval(ctx, replaceQueueScript, []string{ticketQueueKey}, args...).Err()
 }
 
-// 一定時間だけロックを取る取れなければ何もしない
+//一定時間だけロックを取る取れなければ何もしない
 func (o *TicketOrder) TryLock(ctx context.Context, key string, ttl time.Duration) (string, bool, error) {
 	token := uuid.NewString()
 	ok, err := o.client.SetNX(ctx, key, token, ttl).Result()
@@ -115,7 +115,7 @@ func (o *TicketOrder) TryLock(ctx context.Context, key string, ttl time.Duration
 	return token, true, nil
 }
 
-// 自分のロックだけ外す
+//自分のロックだけ外す
 func (o *TicketOrder) Unlock(ctx context.Context, key, token string) error {
 	return o.client.Eval(ctx, unlockScript, []string{key}, token).Err()
 }

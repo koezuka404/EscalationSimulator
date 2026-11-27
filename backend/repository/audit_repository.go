@@ -36,7 +36,7 @@ func MigrateAuditLogs(db *gorm.DB) error {
 	return db.AutoMigrate(&auditRow{})
 }
 
-// 操作の記録を1件残す
+//操作の記録を1件残す
 func (r *auditRepository) Save(ctx context.Context, entry entity.AuditEntry) error {
 	if entry.ID == "" {
 		entry.ID = uuid.NewString()

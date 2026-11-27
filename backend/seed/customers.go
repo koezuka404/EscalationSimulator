@@ -8,7 +8,7 @@ import (
 	"escalator/rule"
 )
 
-// 顧客が1件も無いときだけ、サンプルの顧客を登録する
+//顧客が1件も無いときだけ、サンプルの顧客を登録する
 func SeedCustomersIfEmpty(ctx context.Context, repo port.CustomerRepository) error {
 	customers, err := repo.List(ctx)
 	if err != nil {

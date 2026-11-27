@@ -6,28 +6,22 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-	"golang.org/x/crypto/bcrypt"
-
 	"escalator/entity"
 	"escalator/port"
 	"escalator/rule"
 	"escalator/scope"
-	"escalator/usecase/crypto"
+	"github.com/google/uuid"
 )
 
 type LogIn struct {
-	users       port.UserRepository
-	attempts    port.LoginAttemptRepository
-	sessions    port.SessionRepository
-	secret      []byte
-	issuer      string
-	audience    string
-	accessTTL   time.Duration
-	refreshTTL  time.Duration
-	maxFailures int
-	lock        time.Duration
-	audit       *AuditLog
+	users    port.UserRepository
+	attempts port.LoginAttemptRepository
+	sessions port.SessionRepository
+	password port.PasswordHasher
+	tokens   port.TokenIssuer
+	secrets  port.SecretTokens
+	policy   SessionPolicy
+	audit    *AuditLog
 }
 
 type LoginResult struct {
@@ -38,19 +32,16 @@ type LoginResult struct {
 	User         entity.User
 }
 
-func NewLogIn(users port.UserRepository, attempts port.LoginAttemptRepository, sessions port.SessionRepository, secret []byte, issuer, audience string, accessTTL, refreshTTL time.Duration, maxFailures int, lock time.Duration, audit *AuditLog) *LogIn {
+func NewLogIn(users port.UserRepository, attempts port.LoginAttemptRepository, sessions port.SessionRepository, password port.PasswordHasher, tokens port.TokenIssuer, secrets port.SecretTokens, policy SessionPolicy, audit *AuditLog) *LogIn {
 	return &LogIn{
-		users:       users,
-		attempts:    attempts,
-		sessions:    sessions,
-		secret:      secret,
-		issuer:      issuer,
-		audience:    audience,
-		accessTTL:   accessTTL,
-		refreshTTL:  refreshTTL,
-		maxFailures: maxFailures,
-		lock:        lock,
-		audit:       audit,
+		users:    users,
+		attempts: attempts,
+		sessions: sessions,
+		password: password,
+		tokens:   tokens,
+		secrets:  secrets,
+		policy:   policy,
+		audit:    audit,
 	}
 }
 
@@ -72,7 +63,7 @@ func (l *LogIn) Execute(ctx context.Context, email, password string) (LoginResul
 	if rule.Locked(user, now) {
 		return LoginResult{}, rule.ErrLoginLocked
 	}
-	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)) != nil {
+	if !l.password.Matches(user.PasswordHash, password) {
 		return LoginResult{}, l.recordFailure(ctx, user, email, ip, now)
 	}
 	if user.Status != entity.StatusActive {
@@ -87,15 +78,15 @@ func (l *LogIn) Execute(ctx context.Context, email, password string) (LoginResul
 		return LoginResult{}, err
 	}
 
-	accessToken, expiresAt, err := crypto.IssueAccess(l.secret, l.issuer, l.audience, user.ID, user.AuthVersion, l.accessTTL, now)
+	accessToken, expiresAt, err := l.tokens.Issue(user.ID, user.AuthVersion, now)
 	if err != nil {
 		return LoginResult{}, err
 	}
-	refreshToken, refreshHash, err := crypto.NewSecretToken()
+	refreshToken, refreshHash, err := l.secrets.New()
 	if err != nil {
 		return LoginResult{}, err
 	}
-	csrfToken, _, err := crypto.NewSecretToken()
+	csrfToken, _, err := l.secrets.New()
 	if err != nil {
 		return LoginResult{}, err
 	}
@@ -103,7 +94,7 @@ func (l *LogIn) Execute(ctx context.Context, email, password string) (LoginResul
 		UserID:    user.ID,
 		TokenHash: refreshHash,
 		FamilyID:  uuid.NewString(),
-		ExpiresAt: now.Add(l.refreshTTL),
+		ExpiresAt: now.Add(l.policy.RefreshTTL),
 	}); err != nil {
 		return LoginResult{}, err
 	}
@@ -120,9 +111,9 @@ func (l *LogIn) Execute(ctx context.Context, email, password string) (LoginResul
 func (l *LogIn) recordFailure(ctx context.Context, user entity.User, email, ip string, now time.Time) error {
 	user.FailedLoginCount++
 	stopped := false
-	if user.FailedLoginCount >= l.maxFailures {
+	if user.FailedLoginCount >= l.policy.MaxFailures {
 		user.FailedLoginCount = 0
-		user.LockedUntil = now.Add(l.lock)
+		user.LockedUntil = now.Add(l.policy.Lock)
 		stopped = true
 	}
 	if err := l.users.UpdateLoginState(ctx, user); err != nil {
@@ -175,9 +166,9 @@ func (l *LogIn) noteFailure(ctx context.Context, email, ip string, now time.Time
 	attempt.LastFailedAt = now
 	attempt.UpdatedAt = now
 	stopped := false
-	if attempt.FailedCount >= l.maxFailures {
+	if attempt.FailedCount >= l.policy.MaxFailures {
 		attempt.FailedCount = 0
-		attempt.LockedUntil = now.Add(l.lock)
+		attempt.LockedUntil = now.Add(l.policy.Lock)
 		stopped = true
 	}
 	if err := l.attempts.Save(ctx, attempt); err != nil {

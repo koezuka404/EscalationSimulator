@@ -12,6 +12,7 @@ import (
 	"escalator/entity"
 	"escalator/port"
 	"escalator/rule"
+	"escalator/scope"
 )
 
 type RunDemo struct {
@@ -20,34 +21,29 @@ type RunDemo struct {
 	demos     port.DemoRepository
 	create    *CreateTicket
 	notices   Notifier
-	base      context.Context
 	audit     *AuditLog
 	mu        sync.Mutex
 	cancels   map[string]context.CancelFunc
 }
 
-func NewRunDemo(users port.UserRepository, customers port.CustomerRepository, demos port.DemoRepository, create *CreateTicket, notices Notifier, base context.Context, audit *AuditLog) *RunDemo {
-	if base == nil {
-		base = context.Background()
-	}
+func NewRunDemo(users port.UserRepository, customers port.CustomerRepository, demos port.DemoRepository, create *CreateTicket, notices Notifier, audit *AuditLog) *RunDemo {
 	return &RunDemo{
 		users:     users,
 		customers: customers,
 		demos:     demos,
 		create:    create,
 		notices:   notices,
-		base:      base,
 		audit:     audit,
 		cancels:   make(map[string]context.CancelFunc),
 	}
 }
 
-// 前回の起動で残った実行中のデモを止める
+//前回の起動で残った実行中のデモを止める
 func (d *RunDemo) Recover(ctx context.Context) error {
 	return d.demos.CloseInterrupted(ctx, time.Now())
 }
 
-// 管理者がデモを始め、間隔をあけて通常の起票と同じ道で問い合わせを作る
+//管理者がデモを始め、間隔をあけて通常の起票と同じ道で問い合わせを作る
 func (d *RunDemo) Start(ctx context.Context, authorization string, count, intervalSec int, distribution string) (entity.DemoRun, error) {
 	actor, err := d.create.current.Execute(ctx, authorization)
 	if err != nil {
@@ -82,14 +78,14 @@ func (d *RunDemo) Start(ctx context.Context, authorization string, count, interv
 	if err != nil {
 		return entity.DemoRun{}, err
 	}
-	loopCtx, cancel := context.WithCancel(d.base)
+	loopCtx, cancel := context.WithCancel(scope.Process(ctx))
 	d.track(run.ID, cancel)
 	go d.generate(loopCtx, cancel, run, eligible, grouped)
 	d.audit.Record(ctx, actor.ID, entity.AuditDemoStarted, "demo", run.ID, "デモを開始しました")
 	return run, nil
 }
 
-// 実行中のデモを止めるすでに作った問い合わせはそのまま残す
+//実行中のデモを止めるすでに作った問い合わせはそのまま残す
 func (d *RunDemo) Stop(ctx context.Context, authorization string) (entity.DemoRun, error) {
 	actor, err := d.create.current.Execute(ctx, authorization)
 	if err != nil {

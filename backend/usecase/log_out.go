@@ -7,24 +7,24 @@ import (
 	"escalator/entity"
 	"escalator/port"
 	"escalator/rule"
-	"escalator/usecase/crypto"
 )
 
 type LogOut struct {
+	secrets  port.SecretTokens
 	sessions port.SessionRepository
 	audit    *AuditLog
 }
 
-func NewLogOut(sessions port.SessionRepository, audit *AuditLog) *LogOut {
-	return &LogOut{sessions: sessions, audit: audit}
+func NewLogOut(sessions port.SessionRepository, secrets port.SecretTokens, audit *AuditLog) *LogOut {
+	return &LogOut{secrets: secrets, sessions: sessions, audit: audit}
 }
 
-// 再ログイン用の印を無効にする
+//再ログイン用の印を無効にする
 func (l *LogOut) Execute(ctx context.Context, refreshToken string) error {
 	if refreshToken == "" {
 		return nil
 	}
-	hash := crypto.Hash(refreshToken)
+	hash := l.secrets.Hash(refreshToken)
 	userID, err := l.sessions.FindUserIDByHash(ctx, hash)
 	if err != nil && !errors.Is(err, rule.ErrInvalidRefresh) {
 		return err

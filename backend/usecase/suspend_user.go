@@ -20,7 +20,7 @@ func NewSuspendUser(users port.UserRepository, current *CurrentUser, screens Scr
 	return &SuspendUser{users: users, current: current, screens: screens, audit: audit}
 }
 
-// 管理者だけが利用者を停止し、その人の画面の接続を切る
+//管理者だけが利用者を停止し、その人の画面の接続を切る
 func (s *SuspendUser) Execute(ctx context.Context, authorization, userID string) (entity.User, error) {
 	actor, err := s.current.Execute(ctx, authorization)
 	if err != nil {

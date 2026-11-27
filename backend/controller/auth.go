@@ -8,7 +8,6 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"escalator/entity"
-	"escalator/middleware"
 	"escalator/rule"
 )
 
@@ -36,7 +35,7 @@ func NewAuthAPI(signUp signUpUsecase, logIn logInUsecase, logOut logOutUsecase, 
 	}
 }
 
-// 会員登録を受ける
+//会員登録を受ける
 func (a *AuthAPI) Register(c echo.Context) error {
 	var body registerJSON
 	if err := c.Bind(&body); err != nil {
@@ -49,7 +48,7 @@ func (a *AuthAPI) Register(c echo.Context) error {
 	return c.JSON(http.StatusCreated, toUserJSON(user))
 }
 
-// ログインを受ける
+//ログインを受ける
 func (a *AuthAPI) Login(c echo.Context) error {
 	var body loginJSON
 	if err := c.Bind(&body); err != nil {
@@ -68,11 +67,8 @@ func (a *AuthAPI) Login(c echo.Context) error {
 	})
 }
 
-// ログアウトを受ける
+//ログアウトを受ける
 func (a *AuthAPI) Logout(c echo.Context) error {
-	if err := middleware.Allow(c.Request(), a.csrfCookieName); err != nil {
-		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
-	}
 	refreshToken := ""
 	if cookie, err := c.Cookie(a.refreshCookieName); err == nil {
 		refreshToken = cookie.Value
@@ -85,11 +81,8 @@ func (a *AuthAPI) Logout(c echo.Context) error {
 	return c.JSON(http.StatusOK, messageJSON{Message: "ログアウトしました"})
 }
 
-// ログイン用トークンの再発行を受ける
+//ログイン用トークンの再発行を受ける
 func (a *AuthAPI) Refresh(c echo.Context) error {
-	if err := middleware.Allow(c.Request(), a.csrfCookieName); err != nil {
-		return c.JSON(http.StatusForbidden, messageJSON{Message: err.Error()})
-	}
 	refreshToken := ""
 	if cookie, err := c.Cookie(a.refreshCookieName); err == nil {
 		refreshToken = cookie.Value

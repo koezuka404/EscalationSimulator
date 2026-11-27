@@ -23,7 +23,7 @@ func NewReturnTicketToQueue(tickets port.TicketRepository, customers port.Custom
 	return &ReturnTicketToQueue{tickets: tickets, customers: customers, queue: queue, current: current, notices: notices, audit: audit}
 }
 
-// 管理者が担当を外し、対応中のチケットを待ちに戻す
+//管理者が担当を外し、対応中のチケットを待ちに戻す
 func (r *ReturnTicketToQueue) Execute(ctx context.Context, authorization, ticketID string) (entity.Ticket, error) {
 	actor, err := r.current.Execute(ctx, authorization)
 	if err != nil {

@@ -29,7 +29,7 @@ func NewQueueSnapshot(tickets port.TicketRepository, customers port.CustomerRepo
 	return &QueueSnapshot{tickets: tickets, customers: customers, users: users, statuses: statuses}
 }
 
-// つながった担当者と管理者に、今の待ち順と稼働を返す
+//つながった担当者と管理者に、今の待ち順と稼働を返す
 func (s *QueueSnapshot) Execute(ctx context.Context) (QueuePicture, error) {
 	open, err := s.tickets.ListOpen(ctx)
 	if err != nil {

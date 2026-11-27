@@ -45,7 +45,7 @@ func NewShowTicket(tickets port.TicketRepository, customers port.CustomerReposit
 	return &ShowTicket{tickets: tickets, customers: customers, users: users, current: current}
 }
 
-// 見られる人に、チケットの詳細、対応メモ、緊急度の変更履歴を返す
+//見られる人に、チケットの詳細、対応メモ、緊急度の変更履歴を返す
 func (s *ShowTicket) Execute(ctx context.Context, authorization, ticketID string) (TicketDetail, error) {
 	actor, err := s.current.Execute(ctx, authorization)
 	if err != nil {

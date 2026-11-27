@@ -19,7 +19,7 @@ func NewLinkApplicant(users port.UserRepository, customers port.CustomerReposito
 	return &LinkApplicant{users: users, customers: customers, current: current, audit: audit}
 }
 
-// 管理者だけが、申請者を顧客に結びつける
+//管理者だけが、申請者を顧客に結びつける
 func (l *LinkApplicant) Execute(ctx context.Context, authorization, userID, customerID string) (entity.User, error) {
 	actor, err := l.current.Execute(ctx, authorization)
 	if err != nil {

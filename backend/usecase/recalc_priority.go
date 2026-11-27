@@ -21,7 +21,7 @@ func NewRecalcOpenScores(tickets port.TicketRepository, customers port.CustomerR
 	return &RecalcOpenScores{tickets: tickets, customers: customers, queue: queue, notices: notices}
 }
 
-// 対応待ちの点数を今の時刻でやり直し、待ち順も同じ点数にする
+//対応待ちの点数を今の時刻でやり直し、待ち順も同じ点数にする
 func (r *RecalcOpenScores) Execute(ctx context.Context) error {
 	open, byID, err := r.openTickets(ctx)
 	if err != nil {
@@ -43,7 +43,7 @@ func (r *RecalcOpenScores) Execute(ctx context.Context) error {
 	return nil
 }
 
-// 待ち順を空にして、今の対応待ちだけを載せ直す
+//待ち順を空にして、今の対応待ちだけを載せ直す
 func (r *RecalcOpenScores) Rebuild(ctx context.Context) error {
 	open, byID, err := r.openTickets(ctx)
 	if err != nil {
