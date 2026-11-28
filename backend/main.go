@@ -46,11 +46,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	sqlDB, err := conn.DB()
-	if err != nil {
-		return fmt.Errorf("データベースに接続できませんでした: %w", err)
-	}
-	defer sqlDB.Close()
+	defer db.Close(conn)
 
 	order, err := redis.Open(cfg.RedisURL)
 	if err != nil {
